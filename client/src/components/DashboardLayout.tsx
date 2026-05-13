@@ -68,6 +68,7 @@ const menuSections: MenuSection[] = [
       { icon: Globe, label: "APIs", path: "/apis" },
       { icon: BookOpen, label: "Plans", path: "/plans" },
       { icon: Zap, label: "Consumer Apps", path: "/consumer-apps" },
+      { icon: Key, label: "Subscriptions", path: "/subscriptions" },
       { icon: Shield, label: "Policies", path: "/policies" },
     ],
   },
@@ -84,9 +85,13 @@ const menuSections: MenuSection[] = [
     title: "PLATFORM",
     items: [
       { icon: Users, label: "Roles & Access", path: "/rbac" },
+      { icon: Shield, label: "Role Assignments", path: "/role-assignments" },
       { icon: Key, label: "Compliance", path: "/compliance" },
       { icon: Server, label: "Status", path: "/status" },
       { icon: AlertTriangle, label: "Support", path: "/support" },
+      { icon: Activity, label: "SRE Dashboard", path: "/sre" },
+      { icon: Building2, label: "Tenant Lifecycle", path: "/tenant-lifecycle" },
+      { icon: CreditCard, label: "Payment Methods", path: "/payment-methods" },
     ],
   },
 ];

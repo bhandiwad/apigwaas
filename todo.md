@@ -33,8 +33,8 @@
 - [x] Status/incidents router (service health, maintenance windows)
 - [x] Compliance router (artifacts, DPDP rights, BYOK management)
 - [x] Analytics router (real-time metrics, top APIs, latency trends)
-- [ ] SRE dashboard router (platform health, per-tenant drilldown, capacity)
-- [ ] Tenant lifecycle router (provisioning, suspension, offboarding, data export)
+- [x] SRE dashboard router (platform health, per-tenant drilldown, capacity)
+- [x] Tenant lifecycle router (provisioning, suspension, offboarding, data export)
 
 ## Frontend - Layout & Branding
 - [x] Sify/infinitAIZEN branded theme (gold/amber accent, clean white content)
@@ -44,7 +44,7 @@
 
 ## Frontend - Customer Portal Pages
 - [x] Overview/Home dashboard with KPI cards and navigation cards
-- [ ] Self-service signup flow (corporate email, KYC/KYB, MFA, tier selection)
+- [x] Self-service signup flow (corporate email, KYC/KYB, MFA, tier selection)
 - [x] Workspace management page
 - [x] Tier and add-on management (in Tenants page)
 - [x] User and role management page (RBAC page)
@@ -52,16 +52,16 @@
 ## Frontend - API Management Pages
 - [x] API catalog/list page
 - [x] Create API page with protocol selection
-- [ ] API detail page (versions, deployments, policies)
+- [x] API detail page (versions, deployments, policies)
 - [x] Plans management page
-- [ ] Subscriptions management page
+- [x] Subscriptions management page
 - [x] Consumer applications page
 - [x] Policy configuration page (masking, rate limit, geoip, vault)
 
 ## Frontend - Billing Pages
 - [x] Usage dashboard (calls, data transfer, cost attribution by workspace)
 - [x] Invoices list with GST-compliant display
-- [ ] Payment methods management
+- [x] Payment methods management
 - [x] Service credits display
 - [x] Dunning/payment failure alerts
 
@@ -73,21 +73,21 @@
 ## Frontend - RBAC Pages
 - [x] Roles list and custom role editor
 - [x] Permission matrix display (platform, workspace, API, application scopes)
-- [ ] Role assignments page
+- [x] Role assignments page
 
 ## Frontend - SRE Dashboard Pages
-- [ ] Platform health overview (aggregate availability, latency, error rate)
-- [ ] Per-tenant drilldown page
-- [ ] Capacity dashboard (load vs headroom, forecast)
-- [ ] Cost dashboard (infra cost per tenant)
-- [ ] Security dashboard (auth failures, anomalies)
+- [x] Platform health overview (aggregate availability, latency, error rate)
+- [x] Per-tenant drilldown page
+- [x] Capacity dashboard (load vs headroom, forecast)
+- [x] Cost dashboard (infra cost per tenant)
+- [x] Security dashboard (auth failures, anomalies)
 
 ## Frontend - Tenant Lifecycle Pages
 - [x] Tenant list with status indicators
 - [x] Tenant creation with KYC/KYB fields (GSTIN, PAN)
-- [ ] Tenant provisioning wizard
-- [ ] Suspension and offboarding workflows
-- [ ] Data export bundle download page
+- [x] Tenant provisioning wizard
+- [x] Suspension and offboarding workflows
+- [x] Data export bundle download page
 
 ## Frontend - Compliance & Security Pages
 - [x] DPDP Data Principal Rights portal
@@ -110,5 +110,7 @@
 - [x] Metering pipeline status (customer-facing + Sify-side)
 
 ## Testing
-- [x] Backend unit tests for core routers (11 tests passing)
+- [x] Backend unit tests for core routers (24 tests passing across 3 test files)
 - [x] Auth and RBAC permission tests
+- [x] Feature tests: audit export SHA-256, billing, analytics, metering, compliance, support, status
+- [x] Subscription and consumer app router validation tests
