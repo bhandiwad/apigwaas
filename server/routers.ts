@@ -484,6 +484,354 @@ const notificationRouter = router({
   }),
 });
 
+// ─── Gateway Cluster Router ─────────────────────────────────────────────────
+const gatewayRouter = router({
+  clusters: protectedProcedure.query(async () => {
+    return db.getGatewayClusters();
+  }),
+  createCluster: protectedProcedure.input(z.object({
+    name: z.string().min(1),
+    region: z.string().min(1),
+    tier: z.enum(["shared", "dedicated", "sovereign"]).default("shared"),
+    maxNodes: z.number().default(10),
+    shardingTags: z.array(z.string()).optional(),
+    graviteeVersion: z.string().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createGatewayCluster({ ...input, shardingTags: input.shardingTags || [], status: "provisioning" });
+    await db.createAuditEvent({ action: "gateway_cluster.created", actionType: "create", targetType: "gateway_cluster", targetId: String(id), targetName: input.name });
+    return { id };
+  }),
+  updateCluster: protectedProcedure.input(z.object({
+    id: z.number(),
+    status: z.enum(["healthy", "degraded", "offline", "provisioning"]).optional(),
+    nodeCount: z.number().optional(),
+    cpuUsagePercent: z.number().optional(),
+    memoryUsagePercent: z.number().optional(),
+    requestsPerSecond: z.number().optional(),
+    shardingTags: z.array(z.string()).optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateGatewayCluster(id, data);
+    return { success: true };
+  }),
+  deployments: protectedProcedure.input(z.object({
+    apiId: z.number().optional(),
+    clusterId: z.number().optional(),
+  })).query(async ({ input }) => {
+    return db.getApiDeployments(input.apiId, input.clusterId);
+  }),
+  deploy: protectedProcedure.input(z.object({
+    apiId: z.number(),
+    clusterId: z.number(),
+    tenantId: z.number(),
+    version: z.string(),
+    strategy: z.enum(["rolling", "blue_green", "canary"]).default("rolling"),
+    configuration: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createApiDeployment({ ...input, status: "deploying", syncStatus: "syncing" });
+    // Simulate async deployment completion
+    setTimeout(async () => {
+      await db.updateApiDeployment(id!, { status: "deployed", syncStatus: "synced", deployedAt: new Date(), lastSyncAt: new Date() });
+    }, 3000);
+    await db.createAuditEvent({ action: "api.deployed", actionType: "deploy", targetType: "api", targetId: String(input.apiId), tenantId: input.tenantId });
+    return { id };
+  }),
+  undeploy: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.updateApiDeployment(input.id, { status: "undeployed", syncStatus: "out_of_sync" });
+    return { success: true };
+  }),
+});
+
+// ─── Developer Portal Router ────────────────────────────────────────────────
+const devPortalRouter = router({
+  list: protectedProcedure.input(z.object({ tenantId: z.number().optional() })).query(async ({ input }) => {
+    return db.getDeveloperPortals(input.tenantId);
+  }),
+  create: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    name: z.string().min(1),
+    customDomain: z.string().optional(),
+    description: z.string().optional(),
+    enableSignup: z.boolean().default(true),
+    enableAutoApprove: z.boolean().default(false),
+    theme: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createDeveloperPortal({ ...input, status: "draft" });
+    await db.createAuditEvent({ action: "developer_portal.created", actionType: "create", targetType: "developer_portal", targetId: String(id), targetName: input.name, tenantId: input.tenantId });
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    name: z.string().optional(),
+    customDomain: z.string().optional(),
+    description: z.string().optional(),
+    status: z.enum(["active", "draft", "disabled"]).optional(),
+    enableSignup: z.boolean().optional(),
+    enableAutoApprove: z.boolean().optional(),
+    theme: z.any().optional(),
+    publishedApis: z.array(z.number()).optional(),
+    customCss: z.string().optional(),
+    logoUrl: z.string().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateDeveloperPortal(id, data);
+    return { success: true };
+  }),
+});
+
+// ─── Data Masking Router (F-01) ─────────────────────────────────────────────
+const maskingRouter = router({
+  rules: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    apiId: z.number().optional(),
+  })).query(async ({ input }) => {
+    return db.getMaskingRules(input.tenantId, input.apiId);
+  }),
+  createRule: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    apiId: z.number().optional(),
+    name: z.string().min(1),
+    jsonPath: z.string().min(1),
+    action: z.enum(["full_replace", "partial", "hash_sha256", "redact"]),
+    replacement: z.string().optional(),
+    showLastN: z.number().optional(),
+    category: z.enum(["pan_card", "aadhaar", "credit_card", "email", "phone", "iban", "ifsc", "custom"]).default("custom"),
+    phase: z.enum(["request", "response", "both"]).default("both"),
+    priority: z.number().default(0),
+  })).mutation(async ({ input }) => {
+    const id = await db.createMaskingRule(input);
+    await db.createAuditEvent({ action: "masking_rule.created", actionType: "create", targetType: "masking_rule", targetId: String(id), targetName: input.name, tenantId: input.tenantId });
+    return { id };
+  }),
+  updateRule: protectedProcedure.input(z.object({
+    id: z.number(),
+    enabled: z.boolean().optional(),
+    jsonPath: z.string().optional(),
+    action: z.enum(["full_replace", "partial", "hash_sha256", "redact"]).optional(),
+    replacement: z.string().optional(),
+    showLastN: z.number().optional(),
+    priority: z.number().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateMaskingRule(id, data);
+    return { success: true };
+  }),
+  deleteRule: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteMaskingRule(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── DCR Router (F-06) ──────────────────────────────────────────────────────
+const dcrRouter = router({
+  clients: protectedProcedure.input(z.object({ tenantId: z.number() })).query(async ({ input }) => {
+    return db.getDcrClients(input.tenantId);
+  }),
+  register: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    clientName: z.string().min(1),
+    redirectUris: z.array(z.string()).optional(),
+    grantTypes: z.array(z.string()).default(["client_credentials"]),
+    responseTypes: z.array(z.string()).optional(),
+    tokenEndpointAuthMethod: z.string().default("client_secret_basic"),
+    scope: z.string().optional(),
+    autoSubscribePlan: z.number().optional(),
+  })).mutation(async ({ input }) => {
+    const clientId = `dcr_${nanoid(24)}`;
+    const clientSecret = nanoid(48);
+    const clientSecretHash = crypto.createHash("sha256").update(clientSecret).digest("hex");
+    const registrationAccessToken = nanoid(64);
+    const id = await db.createDcrClient({ ...input, clientId, clientSecretHash, registrationAccessToken });
+    await db.createAuditEvent({ action: "dcr_client.registered", actionType: "create", targetType: "dcr_client", targetId: String(id), targetName: input.clientName, tenantId: input.tenantId });
+    return { id, clientId, clientSecret, registrationAccessToken };
+  }),
+  rotateSecret: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    const newSecret = nanoid(48);
+    const newHash = crypto.createHash("sha256").update(newSecret).digest("hex");
+    await db.updateDcrClient(input.id, { clientSecretHash: newHash, lastRotatedAt: new Date() });
+    return { clientSecret: newSecret };
+  }),
+  updateStatus: protectedProcedure.input(z.object({
+    id: z.number(),
+    status: z.enum(["active", "suspended", "revoked"]),
+  })).mutation(async ({ input }) => {
+    await db.updateDcrClient(input.id, { status: input.status });
+    return { success: true };
+  }),
+});
+
+// ─── Identity Provider Router (F-04) ────────────────────────────────────────
+const idpRouter = router({
+  list: protectedProcedure.input(z.object({ tenantId: z.number() })).query(async ({ input }) => {
+    return db.getIdentityProviders(input.tenantId);
+  }),
+  create: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    name: z.string().min(1),
+    type: z.enum(["oidc", "saml", "ldap"]),
+    issuerUrl: z.string().optional(),
+    clientId: z.string().optional(),
+    clientSecretRef: z.string().optional(),
+    discoveryUrl: z.string().optional(),
+    samlMetadataUrl: z.string().optional(),
+    groupClaimMapping: z.any().optional(),
+    roleClaimMapping: z.any().optional(),
+    jitProvisioning: z.boolean().default(true),
+    scimEnabled: z.boolean().default(false),
+    scimEndpoint: z.string().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createIdentityProvider({ ...input, status: "inactive" });
+    await db.createAuditEvent({ action: "idp.created", actionType: "create", targetType: "identity_provider", targetId: String(id), targetName: input.name, tenantId: input.tenantId });
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    status: z.enum(["active", "inactive", "testing"]).optional(),
+    groupClaimMapping: z.any().optional(),
+    roleClaimMapping: z.any().optional(),
+    jitProvisioning: z.boolean().optional(),
+    scimEnabled: z.boolean().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateIdentityProvider(id, data);
+    return { success: true };
+  }),
+});
+
+// ─── API Environments / APIOps Router (F-12) ────────────────────────────────
+const envRouter = router({
+  list: protectedProcedure.input(z.object({ tenantId: z.number() })).query(async ({ input }) => {
+    return db.getApiEnvironments(input.tenantId);
+  }),
+  create: protectedProcedure.input(z.object({
+    tenantId: z.number(),
+    name: z.string().min(1),
+    slug: z.string().min(1),
+    order: z.number().default(0),
+    clusterId: z.number().optional(),
+    gitBranch: z.string().optional(),
+    gitFolder: z.string().optional(),
+    argoAppName: z.string().optional(),
+    autoPromote: z.boolean().default(false),
+  })).mutation(async ({ input }) => {
+    const id = await db.createApiEnvironment(input);
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    clusterId: z.number().optional(),
+    gitBranch: z.string().optional(),
+    gitFolder: z.string().optional(),
+    argoAppName: z.string().optional(),
+    autoPromote: z.boolean().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateApiEnvironment(id, data);
+    return { success: true };
+  }),
+});
+
+// ─── Alert Rules Router (F-11) ──────────────────────────────────────────────
+const alertRouter = router({
+  rules: protectedProcedure.input(z.object({ tenantId: z.number().optional() })).query(async ({ input }) => {
+    return db.getAlertRules(input.tenantId);
+  }),
+  create: protectedProcedure.input(z.object({
+    tenantId: z.number().optional(),
+    name: z.string().min(1),
+    type: z.enum(["error_rate", "latency_p99", "quota_usage", "cert_expiry", "subscription_expiry", "custom"]),
+    condition: z.any().optional(),
+    threshold: z.number().optional(),
+    duration: z.string().optional(),
+    severity: z.enum(["info", "warning", "critical"]).default("warning"),
+    channels: z.array(z.object({ type: z.string(), target: z.string() })).optional(),
+    enabled: z.boolean().default(true),
+  })).mutation(async ({ input }) => {
+    const id = await db.createAlertRule({ ...input, threshold: input.threshold ? String(input.threshold) : undefined, channels: input.channels || [] });
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    enabled: z.boolean().optional(),
+    threshold: z.number().optional(),
+    severity: z.enum(["info", "warning", "critical"]).optional(),
+    channels: z.array(z.object({ type: z.string(), target: z.string() })).optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateAlertRule(id, { ...data, threshold: data.threshold ? String(data.threshold) : undefined });
+    return { success: true };
+  }),
+});
+
+// ─── Event Entrypoints Router (F-13) ────────────────────────────────────────
+const eventRouter = router({
+  entrypoints: protectedProcedure.input(z.object({
+    apiId: z.number().optional(),
+    tenantId: z.number().optional(),
+  })).query(async ({ input }) => {
+    return db.getEventEntrypoints(input.apiId, input.tenantId);
+  }),
+  create: protectedProcedure.input(z.object({
+    apiId: z.number(),
+    tenantId: z.number(),
+    type: z.enum(["kafka", "mqtt", "rabbitmq", "webhook"]),
+    topicPattern: z.string().optional(),
+    brokerUrl: z.string().optional(),
+    authMethod: z.enum(["none", "sasl_plain", "sasl_scram", "mtls", "api_key"]).default("none"),
+    configuration: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createEventEntrypoint({ ...input, status: "inactive" });
+    await db.createAuditEvent({ action: "event_entrypoint.created", actionType: "create", targetType: "event_entrypoint", targetId: String(id), tenantId: input.tenantId });
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    status: z.enum(["active", "inactive", "error"]).optional(),
+    topicPattern: z.string().optional(),
+    brokerUrl: z.string().optional(),
+    authMethod: z.enum(["none", "sasl_plain", "sasl_scram", "mtls", "api_key"]).optional(),
+    configuration: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateEventEntrypoint(id, data);
+    return { success: true };
+  }),
+});
+
+// ─── Policy Chains Router ───────────────────────────────────────────────────
+const policyChainRouter = router({
+  list: protectedProcedure.input(z.object({ apiId: z.number() })).query(async ({ input }) => {
+    return db.getPolicyChains(input.apiId);
+  }),
+  add: protectedProcedure.input(z.object({
+    apiId: z.number(),
+    tenantId: z.number(),
+    phase: z.enum(["request", "response", "connect", "subscribe", "publish"]),
+    policyId: z.number(),
+    order: z.number(),
+    condition: z.string().optional(),
+    configuration: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const id = await db.createPolicyChain(input);
+    return { id };
+  }),
+  update: protectedProcedure.input(z.object({
+    id: z.number(),
+    order: z.number().optional(),
+    condition: z.string().optional(),
+    enabled: z.boolean().optional(),
+    configuration: z.any().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updatePolicyChain(id, data);
+    return { success: true };
+  }),
+  remove: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deletePolicyChain(input.id);
+    return { success: true };
+  }),
+});
+
 // ─── Main App Router ─────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -510,6 +858,15 @@ export const appRouter = router({
   rbac: rbacRouter,
   analytics: analyticsRouter,
   notification: notificationRouter,
+  gateway: gatewayRouter,
+  devPortal: devPortalRouter,
+  masking: maskingRouter,
+  dcr: dcrRouter,
+  idp: idpRouter,
+  env: envRouter,
+  alert: alertRouter,
+  event: eventRouter,
+  policyChain: policyChainRouter,
 });
 
 export type AppRouter = typeof appRouter;

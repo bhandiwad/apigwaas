@@ -344,3 +344,199 @@ export const meteringEvents = mysqlTable("metering_events", {
 });
 
 export type MeteringEvent = typeof meteringEvents.$inferSelect;
+
+// ─── Gateway Clusters ───────────────────────────────────────────────────────
+export const gatewayClusters = mysqlTable("gateway_clusters", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  region: varchar("region", { length: 64 }).notNull(),
+  tier: mysqlEnum("tier", ["shared", "dedicated", "sovereign"]).default("shared").notNull(),
+  status: mysqlEnum("status", ["healthy", "degraded", "offline", "provisioning"]).default("provisioning").notNull(),
+  nodeCount: int("nodeCount").default(0),
+  maxNodes: int("maxNodes").default(10),
+  cpuUsagePercent: int("cpuUsagePercent").default(0),
+  memoryUsagePercent: int("memoryUsagePercent").default(0),
+  requestsPerSecond: int("requestsPerSecond").default(0),
+  shardingTags: json("shardingTags"),
+  graviteeVersion: varchar("graviteeVersion", { length: 32 }),
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type GatewayCluster = typeof gatewayClusters.$inferSelect;
+
+// ─── API Deployments ────────────────────────────────────────────────────────
+export const apiDeployments = mysqlTable("api_deployments", {
+  id: int("id").autoincrement().primaryKey(),
+  apiId: int("apiId").notNull(),
+  clusterId: int("clusterId").notNull(),
+  tenantId: int("tenantId").notNull(),
+  version: varchar("version", { length: 32 }).notNull(),
+  status: mysqlEnum("status", ["pending", "deploying", "deployed", "failed", "undeploying", "undeployed"]).default("pending").notNull(),
+  strategy: mysqlEnum("strategy", ["rolling", "blue_green", "canary"]).default("rolling").notNull(),
+  syncStatus: mysqlEnum("syncStatus", ["synced", "out_of_sync", "syncing", "error"]).default("out_of_sync").notNull(),
+  deployedAt: timestamp("deployedAt"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  configuration: json("configuration"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ApiDeployment = typeof apiDeployments.$inferSelect;
+
+// ─── Developer Portal Config ────────────────────────────────────────────────
+export const developerPortals = mysqlTable("developer_portals", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  customDomain: varchar("customDomain", { length: 512 }),
+  theme: json("theme"),
+  logoUrl: text("logoUrl"),
+  description: text("description"),
+  status: mysqlEnum("status", ["active", "draft", "disabled"]).default("draft").notNull(),
+  enableSignup: boolean("enableSignup").default(true),
+  enableAutoApprove: boolean("enableAutoApprove").default(false),
+  publishedApis: json("publishedApis"),
+  customCss: text("customCss"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DeveloperPortal = typeof developerPortals.$inferSelect;
+
+// ─── Data Masking Rules ─────────────────────────────────────────────────────
+export const maskingRules = mysqlTable("masking_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  apiId: int("apiId"),
+  name: varchar("name", { length: 255 }).notNull(),
+  jsonPath: varchar("jsonPath", { length: 512 }).notNull(),
+  action: mysqlEnum("action", ["full_replace", "partial", "hash_sha256", "redact"]).notNull(),
+  replacement: varchar("replacement", { length: 255 }),
+  showLastN: int("showLastN"),
+  category: mysqlEnum("category", ["pan_card", "aadhaar", "credit_card", "email", "phone", "iban", "ifsc", "custom"]).default("custom").notNull(),
+  phase: mysqlEnum("phase", ["request", "response", "both"]).default("both").notNull(),
+  enabled: boolean("enabled").default(true),
+  priority: int("priority").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MaskingRule = typeof maskingRules.$inferSelect;
+
+// ─── DCR (Dynamic Client Registration) ─────────────────────────────────────
+export const dcrClients = mysqlTable("dcr_clients", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  clientId: varchar("clientId", { length: 128 }).notNull().unique(),
+  clientName: varchar("clientName", { length: 255 }).notNull(),
+  clientSecretHash: varchar("clientSecretHash", { length: 512 }),
+  redirectUris: json("redirectUris"),
+  grantTypes: json("grantTypes"),
+  responseTypes: json("responseTypes"),
+  tokenEndpointAuthMethod: varchar("tokenEndpointAuthMethod", { length: 64 }).default("client_secret_basic"),
+  scope: text("scope"),
+  autoSubscribePlan: int("autoSubscribePlan"),
+  status: mysqlEnum("status", ["active", "suspended", "revoked"]).default("active").notNull(),
+  registrationAccessToken: varchar("registrationAccessToken", { length: 512 }),
+  lastRotatedAt: timestamp("lastRotatedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DcrClient = typeof dcrClients.$inferSelect;
+
+// ─── Identity Providers (OIDC/SAML) ────────────────────────────────────────
+export const identityProviders = mysqlTable("identity_providers", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["oidc", "saml", "ldap"]).notNull(),
+  issuerUrl: text("issuerUrl"),
+  clientId: varchar("clientId", { length: 255 }),
+  clientSecretRef: varchar("clientSecretRef", { length: 255 }),
+  discoveryUrl: text("discoveryUrl"),
+  samlMetadataUrl: text("samlMetadataUrl"),
+  groupClaimMapping: json("groupClaimMapping"),
+  roleClaimMapping: json("roleClaimMapping"),
+  jitProvisioning: boolean("jitProvisioning").default(true),
+  scimEnabled: boolean("scimEnabled").default(false),
+  scimEndpoint: text("scimEndpoint"),
+  status: mysqlEnum("status", ["active", "inactive", "testing"]).default("inactive").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type IdentityProvider = typeof identityProviders.$inferSelect;
+
+// ─── API Environments (for promotion pipeline) ─────────────────────────────
+export const apiEnvironments = mysqlTable("api_environments", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  slug: varchar("slug", { length: 64 }).notNull(),
+  order: int("order").default(0),
+  clusterId: int("clusterId"),
+  gitBranch: varchar("gitBranch", { length: 128 }),
+  gitFolder: varchar("gitFolder", { length: 512 }),
+  argoAppName: varchar("argoAppName", { length: 255 }),
+  autoPromote: boolean("autoPromote").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ApiEnvironment = typeof apiEnvironments.$inferSelect;
+
+// ─── Alert Rules ────────────────────────────────────────────────────────────
+export const alertRules = mysqlTable("alert_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId"),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["error_rate", "latency_p99", "quota_usage", "cert_expiry", "subscription_expiry", "custom"]).notNull(),
+  condition: json("condition"),
+  threshold: decimal("threshold", { precision: 10, scale: 2 }),
+  duration: varchar("duration", { length: 32 }),
+  severity: mysqlEnum("severity", ["info", "warning", "critical"]).default("warning").notNull(),
+  channels: json("channels"),
+  enabled: boolean("enabled").default(true),
+  lastTriggeredAt: timestamp("lastTriggeredAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AlertRule = typeof alertRules.$inferSelect;
+
+// ─── Event-Native Entrypoints ───────────────────────────────────────────────
+export const eventEntrypoints = mysqlTable("event_entrypoints", {
+  id: int("id").autoincrement().primaryKey(),
+  apiId: int("apiId").notNull(),
+  tenantId: int("tenantId").notNull(),
+  type: mysqlEnum("type", ["kafka", "mqtt", "rabbitmq", "webhook"]).notNull(),
+  configuration: json("configuration"),
+  topicPattern: varchar("topicPattern", { length: 512 }),
+  brokerUrl: text("brokerUrl"),
+  authMethod: mysqlEnum("authMethod", ["none", "sasl_plain", "sasl_scram", "mtls", "api_key"]).default("none"),
+  status: mysqlEnum("status", ["active", "inactive", "error"]).default("inactive").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EventEntrypoint = typeof eventEntrypoints.$inferSelect;
+
+// ─── Policy Chains (ordered policy execution) ───────────────────────────────
+export const policyChains = mysqlTable("policy_chains", {
+  id: int("id").autoincrement().primaryKey(),
+  apiId: int("apiId").notNull(),
+  tenantId: int("tenantId").notNull(),
+  phase: mysqlEnum("phase", ["request", "response", "connect", "subscribe", "publish"]).notNull(),
+  policyId: int("policyId").notNull(),
+  order: int("order").notNull(),
+  condition: text("condition"),
+  enabled: boolean("enabled").default(true),
+  configuration: json("configuration"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PolicyChain = typeof policyChains.$inferSelect;

@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gte, lte, like, or, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, tenants, workspaces, apis, plans, consumerApps, subscriptions, policies, auditEvents, invoices, usageRecords, supportTickets, incidents, complianceArtifacts, roles, roleAssignments, byokKeys, notifications, meteringEvents } from "../drizzle/schema";
+import { InsertUser, users, tenants, workspaces, apis, plans, consumerApps, subscriptions, policies, auditEvents, invoices, usageRecords, supportTickets, incidents, complianceArtifacts, roles, roleAssignments, byokKeys, notifications, meteringEvents, gatewayClusters, apiDeployments, developerPortals, maskingRules, dcrClients, identityProviders, apiEnvironments, alertRules, eventEntrypoints, policyChains } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -430,4 +430,232 @@ export async function getDashboardStats(tenantId?: number) {
   const [subCount] = await db.select({ count: count() }).from(subscriptions);
   const [wsCount] = await db.select({ count: count() }).from(workspaces);
   return { totalApis: apiCount?.count || 0, totalConsumerApps: appCount?.count || 0, totalSubscriptions: subCount?.count || 0, totalWorkspaces: wsCount?.count || 0, totalTenants: tenantCount?.count || 0 };
+}
+
+// ─── Gateway Clusters ───────────────────────────────────────────────────────
+export async function getGatewayClusters() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(gatewayClusters).orderBy(desc(gatewayClusters.createdAt));
+}
+
+export async function createGatewayCluster(data: typeof gatewayClusters.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(gatewayClusters).values(data);
+  return result[0].insertId;
+}
+
+export async function updateGatewayCluster(id: number, data: Partial<typeof gatewayClusters.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(gatewayClusters).set(data).where(eq(gatewayClusters.id, id));
+}
+
+// ─── API Deployments ────────────────────────────────────────────────────────
+export async function getApiDeployments(apiId?: number, clusterId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (apiId) conditions.push(eq(apiDeployments.apiId, apiId));
+  if (clusterId) conditions.push(eq(apiDeployments.clusterId, clusterId));
+  if (conditions.length > 0) {
+    return db.select().from(apiDeployments).where(and(...conditions)).orderBy(desc(apiDeployments.createdAt));
+  }
+  return db.select().from(apiDeployments).orderBy(desc(apiDeployments.createdAt));
+}
+
+export async function createApiDeployment(data: typeof apiDeployments.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(apiDeployments).values(data);
+  return result[0].insertId;
+}
+
+export async function updateApiDeployment(id: number, data: Partial<typeof apiDeployments.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(apiDeployments).set(data).where(eq(apiDeployments.id, id));
+}
+
+// ─── Developer Portals ──────────────────────────────────────────────────────
+export async function getDeveloperPortals(tenantId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tenantId) return db.select().from(developerPortals).where(eq(developerPortals.tenantId, tenantId));
+  return db.select().from(developerPortals).orderBy(desc(developerPortals.createdAt));
+}
+
+export async function createDeveloperPortal(data: typeof developerPortals.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(developerPortals).values(data);
+  return result[0].insertId;
+}
+
+export async function updateDeveloperPortal(id: number, data: Partial<typeof developerPortals.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(developerPortals).set(data).where(eq(developerPortals.id, id));
+}
+
+// ─── Masking Rules ──────────────────────────────────────────────────────────
+export async function getMaskingRules(tenantId: number, apiId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [eq(maskingRules.tenantId, tenantId)];
+  if (apiId) conditions.push(eq(maskingRules.apiId, apiId));
+  return db.select().from(maskingRules).where(and(...conditions)).orderBy(maskingRules.priority);
+}
+
+export async function createMaskingRule(data: typeof maskingRules.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(maskingRules).values(data);
+  return result[0].insertId;
+}
+
+export async function updateMaskingRule(id: number, data: Partial<typeof maskingRules.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(maskingRules).set(data).where(eq(maskingRules.id, id));
+}
+
+export async function deleteMaskingRule(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(maskingRules).where(eq(maskingRules.id, id));
+}
+
+// ─── DCR Clients ────────────────────────────────────────────────────────────
+export async function getDcrClients(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dcrClients).where(eq(dcrClients.tenantId, tenantId)).orderBy(desc(dcrClients.createdAt));
+}
+
+export async function createDcrClient(data: typeof dcrClients.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(dcrClients).values(data);
+  return result[0].insertId;
+}
+
+export async function updateDcrClient(id: number, data: Partial<typeof dcrClients.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(dcrClients).set(data).where(eq(dcrClients.id, id));
+}
+
+// ─── Identity Providers ─────────────────────────────────────────────────────
+export async function getIdentityProviders(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(identityProviders).where(eq(identityProviders.tenantId, tenantId)).orderBy(desc(identityProviders.createdAt));
+}
+
+export async function createIdentityProvider(data: typeof identityProviders.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(identityProviders).values(data);
+  return result[0].insertId;
+}
+
+export async function updateIdentityProvider(id: number, data: Partial<typeof identityProviders.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(identityProviders).set(data).where(eq(identityProviders.id, id));
+}
+
+// ─── API Environments ───────────────────────────────────────────────────────
+export async function getApiEnvironments(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(apiEnvironments).where(eq(apiEnvironments.tenantId, tenantId)).orderBy(apiEnvironments.order);
+}
+
+export async function createApiEnvironment(data: typeof apiEnvironments.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(apiEnvironments).values(data);
+  return result[0].insertId;
+}
+
+export async function updateApiEnvironment(id: number, data: Partial<typeof apiEnvironments.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(apiEnvironments).set(data).where(eq(apiEnvironments.id, id));
+}
+
+// ─── Alert Rules ────────────────────────────────────────────────────────────
+export async function getAlertRules(tenantId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tenantId) return db.select().from(alertRules).where(eq(alertRules.tenantId, tenantId));
+  return db.select().from(alertRules).orderBy(desc(alertRules.createdAt));
+}
+
+export async function createAlertRule(data: typeof alertRules.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(alertRules).values(data);
+  return result[0].insertId;
+}
+
+export async function updateAlertRule(id: number, data: Partial<typeof alertRules.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(alertRules).set(data).where(eq(alertRules.id, id));
+}
+
+// ─── Event Entrypoints ──────────────────────────────────────────────────────
+export async function getEventEntrypoints(apiId?: number, tenantId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (apiId) conditions.push(eq(eventEntrypoints.apiId, apiId));
+  if (tenantId) conditions.push(eq(eventEntrypoints.tenantId, tenantId));
+  if (conditions.length > 0) {
+    return db.select().from(eventEntrypoints).where(and(...conditions));
+  }
+  return db.select().from(eventEntrypoints).orderBy(desc(eventEntrypoints.createdAt));
+}
+
+export async function createEventEntrypoint(data: typeof eventEntrypoints.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(eventEntrypoints).values(data);
+  return result[0].insertId;
+}
+
+export async function updateEventEntrypoint(id: number, data: Partial<typeof eventEntrypoints.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(eventEntrypoints).set(data).where(eq(eventEntrypoints.id, id));
+}
+
+// ─── Policy Chains ──────────────────────────────────────────────────────────
+export async function getPolicyChains(apiId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(policyChains).where(eq(policyChains.apiId, apiId)).orderBy(policyChains.phase, policyChains.order);
+}
+
+export async function createPolicyChain(data: typeof policyChains.$inferInsert) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(policyChains).values(data);
+  return result[0].insertId;
+}
+
+export async function updatePolicyChain(id: number, data: Partial<typeof policyChains.$inferInsert>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(policyChains).set(data).where(eq(policyChains.id, id));
+}
+
+export async function deletePolicyChain(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(policyChains).where(eq(policyChains.id, id));
 }

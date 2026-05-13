@@ -27,6 +27,17 @@ import TenantLifecyclePage from "./pages/TenantLifecycle";
 import PaymentMethodsPage from "./pages/PaymentMethods";
 import SignupPage from "./pages/Signup";
 import RoleAssignmentsPage from "./pages/RoleAssignments";
+// Gravitee API Management pages
+import GatewayClustersPage from "./pages/GatewayClusters";
+import DeploymentsPage from "./pages/Deployments";
+import DevPortalPage from "./pages/DevPortal";
+import DataMaskingPage from "./pages/DataMasking";
+import DcrClientsPage from "./pages/DcrClients";
+import IdentityProvidersPage from "./pages/IdentityProviders";
+import EnvironmentsPage from "./pages/Environments";
+import EventEntrypointsPage from "./pages/EventEntrypoints";
+import AlertsPage from "./pages/Alerts";
+import PolicyChainsPage from "./pages/PolicyChains";
 
 function Router() {
   return (
@@ -42,6 +53,7 @@ function Router() {
         <Route path="/consumer-apps" component={ConsumerAppsPage} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
         <Route path="/policies" component={PoliciesPage} />
+        <Route path="/policy-chains" component={PolicyChainsPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/metering" component={MeteringPage} />
         <Route path="/billing" component={BillingPage} />
@@ -54,6 +66,16 @@ function Router() {
         <Route path="/role-assignments" component={RoleAssignmentsPage} />
         <Route path="/payment-methods" component={PaymentMethodsPage} />
         <Route path="/sre" component={SreDashboardPage} />
+        {/* Gravitee API Management */}
+        <Route path="/gateway-clusters" component={GatewayClustersPage} />
+        <Route path="/deployments" component={DeploymentsPage} />
+        <Route path="/dev-portal" component={DevPortalPage} />
+        <Route path="/data-masking" component={DataMaskingPage} />
+        <Route path="/dcr-clients" component={DcrClientsPage} />
+        <Route path="/identity-providers" component={IdentityProvidersPage} />
+        <Route path="/environments" component={EnvironmentsPage} />
+        <Route path="/event-entrypoints" component={EventEntrypointsPage} />
+        <Route path="/alerts" component={AlertsPage} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>

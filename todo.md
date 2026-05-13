@@ -114,3 +114,47 @@
 - [x] Auth and RBAC permission tests
 - [x] Feature tests: audit export SHA-256, billing, analytics, metering, compliance, support, status
 - [x] Subscription and consumer app router validation tests
+
+## Gravitee API Management Features (F-01 to F-13)
+- [ ] F-01: Data Masking Policy engine UI (JSONPath rules, pre-built rulesets for PAN/Aadhaar/PCI, per-API and global config)
+- [ ] F-02: Enhanced Audit Trail (ClickHouse-style query, SIEM stream config, retention policies)
+- [ ] F-03: Metering Policy + Lago Pipeline (custom metric extraction, Kafka topic config, Lago plan sync)
+- [ ] F-04: Enterprise OIDC SSO & Group Mapping (multi-IdP config, SAML, claim-to-role rules, JIT provisioning, SCIM)
+- [ ] F-05: Custom Roles & Tenant Workspaces (permission matrix editor, workspace isolation enforcement)
+- [ ] F-06: Dynamic Client Registration (DCR) - RFC 7591/7592 config, auto-subscribe, credential rotation
+- [ ] F-07: Sharding Tags & Multi-Region Gateway Selection (tag-based API routing, region selectors)
+- [ ] F-08: GeoIP Filtering Policy (allow/deny country lists, MaxMind config, XFF handling)
+- [ ] F-09: HashiCorp Vault Secret Resource (KV v2, dynamic secrets, cache TTL, EL expression config)
+- [ ] F-10: Kafka Reporter Plugin config (topic mapping, Avro/JSON format, buffer settings)
+- [ ] F-11: Prometheus Alerting Rules (error rate, latency, quota, cert expiry thresholds)
+- [ ] F-12: Multi-Environment Promotion / APIOps (GKO CRDs, ArgoCD integration, Git-driven promotion)
+- [ ] F-13: Event-Native Bridging (Kafka/MQTT/RabbitMQ entrypoints, REST proxy config)
+
+## Gravitee Gateway Management UI
+- [ ] Gateway Deployments page (deploy/undeploy APIs to gateway clusters, sync status, blue/green)
+- [ ] Developer Portal management (themed portal config, API catalog publishing, documentation)
+- [ ] API Lifecycle page (draft → published → deprecated → retired, version promotion)
+- [ ] Gateway Clusters page (cluster health, node list, sharding tags, region assignment)
+- [ ] API Designer/Editor (visual flow editor for policies, request/response transformation chains)
+- [ ] Enhanced Policy Configuration (full Gravitee policy chain: request/response/connect phases, ordering, conditions)
+
+## Gravitee API Management Features (F-01 to F-13)
+- [ ] F-01: Data Masking Policy engine UI (JSONPath rules, pre-built rulesets for PAN/Aadhaar/PCI, per-API and global config)
+- [ ] F-03: Metering Policy + Lago Pipeline (custom metric extraction, Kafka topic config, Lago plan sync)
+- [ ] F-04: Enterprise OIDC SSO & Group Mapping (multi-IdP config, SAML, claim-to-role rules, JIT provisioning, SCIM)
+- [ ] F-06: Dynamic Client Registration (DCR) - RFC 7591/7592 config, auto-subscribe, credential rotation
+- [ ] F-07: Sharding Tags & Multi-Region Gateway Selection (tag-based API routing, region selectors)
+- [ ] F-08: GeoIP Filtering Policy (allow/deny country lists, MaxMind config, XFF handling)
+- [ ] F-09: HashiCorp Vault Secret Resource (KV v2, dynamic secrets, cache TTL, EL expression config)
+- [ ] F-10: Kafka Reporter Plugin config (topic mapping, Avro/JSON format, buffer settings)
+- [ ] F-11: Prometheus Alerting Rules (error rate, latency, quota, cert expiry thresholds)
+- [ ] F-12: Multi-Environment Promotion / APIOps (GKO CRDs, ArgoCD integration, Git-driven promotion)
+- [ ] F-13: Event-Native Bridging (Kafka/MQTT/RabbitMQ entrypoints, REST proxy config)
+
+## Gravitee Gateway Management UI
+- [ ] Gateway Deployments page (deploy/undeploy APIs to gateway clusters, sync status, blue/green)
+- [ ] Developer Portal management (themed portal config, API catalog publishing, documentation)
+- [ ] API Lifecycle page (draft -> published -> deprecated -> retired, version promotion)
+- [ ] Gateway Clusters page (cluster health, node list, sharding tags, region assignment)
+- [ ] API Designer/Editor (visual flow editor for policies, request/response transformation chains)
+- [ ] Enhanced Policy Configuration (full Gravitee policy chain: request/response/connect phases, ordering, conditions)

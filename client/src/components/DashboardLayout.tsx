@@ -42,6 +42,12 @@ import {
   BookOpen,
   Zap,
   Building2,
+  Rocket,
+  Fingerprint,
+  GitBranch,
+  Radio,
+  Workflow,
+  EyeOff,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -70,6 +76,26 @@ const menuSections: MenuSection[] = [
       { icon: Zap, label: "Consumer Apps", path: "/consumer-apps" },
       { icon: Key, label: "Subscriptions", path: "/subscriptions" },
       { icon: Shield, label: "Policies", path: "/policies" },
+    ],
+  },
+  {
+    title: "GATEWAY",
+    items: [
+      { icon: Server, label: "Clusters", path: "/gateway-clusters" },
+      { icon: Rocket, label: "Deployments", path: "/deployments" },
+      { icon: Workflow, label: "Policy Chains", path: "/policy-chains" },
+      { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
+      { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
+      { icon: Radio, label: "Event Entrypoints", path: "/event-entrypoints" },
+      { icon: GitBranch, label: "Environments", path: "/environments" },
+    ],
+  },
+  {
+    title: "IDENTITY",
+    items: [
+      { icon: Key, label: "DCR Clients", path: "/dcr-clients" },
+      { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
+      { icon: Bell, label: "Alerts", path: "/alerts" },
     ],
   },
   {
