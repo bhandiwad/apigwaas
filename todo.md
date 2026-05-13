@@ -17,6 +17,15 @@
 - [x] Roles and permissions tables (custom RBAC)
 - [x] BYOK keys table (vault references, rotation status)
 - [x] Notifications table (alerts, maintenance windows)
+- [x] Gateway clusters table (region, sharding tags, health)
+- [x] Deployments table (API → cluster mapping, status)
+- [x] Environments table (dev/staging/prod promotion)
+- [x] DCR clients table (RFC 7591 registration)
+- [x] Masking rules table (JSONPath, rulesets)
+- [x] Identity providers table (OIDC/SAML config)
+- [x] Alert rules table (threshold, channels)
+- [x] Event entrypoints table (Kafka/MQTT/RabbitMQ)
+- [x] Policy chains table (per-API ordered chain)
 
 ## Backend API Layer
 - [x] Tenant management router (CRUD, tier changes, provisioning)
@@ -35,11 +44,20 @@
 - [x] Analytics router (real-time metrics, top APIs, latency trends)
 - [x] SRE dashboard router (platform health, per-tenant drilldown, capacity)
 - [x] Tenant lifecycle router (provisioning, suspension, offboarding, data export)
+- [x] Gateway cluster router (CRUD, health, sharding tags)
+- [x] Deployment router (deploy/undeploy, sync status)
+- [x] Environment router (promotion pipeline, APIOps)
+- [x] DCR router (register, rotate, revoke)
+- [x] Data masking router (rules CRUD, rulesets)
+- [x] Identity provider router (OIDC/SAML config)
+- [x] Alert router (rules, thresholds, channels)
+- [x] Event entrypoint router (Kafka/MQTT/RabbitMQ config)
+- [x] Policy chain router (ordered chain management)
 
 ## Frontend - Layout & Branding
 - [x] Sify/infinitAIZEN branded theme (gold/amber accent, clean white content)
 - [x] DashboardLayout with collapsible sidebar navigation
-- [x] Section-grouped navigation (MAIN, API MANAGEMENT, OPERATIONS, PLATFORM)
+- [x] Section-grouped navigation (MAIN, API MANAGEMENT, GATEWAY, IDENTITY, OPERATIONS, PLATFORM)
 - [x] Responsive design for all viewports
 
 ## Frontend - Customer Portal Pages
@@ -57,6 +75,18 @@
 - [x] Subscriptions management page
 - [x] Consumer applications page
 - [x] Policy configuration page (masking, rate limit, geoip, vault)
+
+## Frontend - Gravitee Gateway Pages
+- [x] Gateway Clusters page (cluster health, node list, sharding tags, region assignment)
+- [x] Deployments page (deploy/undeploy APIs to gateway clusters, sync status)
+- [x] Policy Chains page (visual flow editor for request/response/connect phases, ordering, conditions)
+- [x] Data Masking page (JSONPath rules, pre-built rulesets for PAN/Aadhaar/PCI)
+- [x] Developer Portal management (themed portal config, API catalog publishing)
+- [x] Event Entrypoints page (Kafka/MQTT/RabbitMQ/Webhook config)
+- [x] Environments/APIOps page (multi-env promotion, GitOps pipeline)
+- [x] DCR Clients page (RFC 7591/7592, auto-subscribe, credential rotation)
+- [x] Identity Providers page (OIDC/SAML config, group mapping, JIT provisioning)
+- [x] Alerts page (threshold rules, multi-channel notifications)
 
 ## Frontend - Billing Pages
 - [x] Usage dashboard (calls, data transfer, cost attribution by workspace)
@@ -115,46 +145,10 @@
 - [x] Feature tests: audit export SHA-256, billing, analytics, metering, compliance, support, status
 - [x] Subscription and consumer app router validation tests
 
-## Gravitee API Management Features (F-01 to F-13)
-- [ ] F-01: Data Masking Policy engine UI (JSONPath rules, pre-built rulesets for PAN/Aadhaar/PCI, per-API and global config)
-- [ ] F-02: Enhanced Audit Trail (ClickHouse-style query, SIEM stream config, retention policies)
-- [ ] F-03: Metering Policy + Lago Pipeline (custom metric extraction, Kafka topic config, Lago plan sync)
-- [ ] F-04: Enterprise OIDC SSO & Group Mapping (multi-IdP config, SAML, claim-to-role rules, JIT provisioning, SCIM)
-- [ ] F-05: Custom Roles & Tenant Workspaces (permission matrix editor, workspace isolation enforcement)
-- [ ] F-06: Dynamic Client Registration (DCR) - RFC 7591/7592 config, auto-subscribe, credential rotation
-- [ ] F-07: Sharding Tags & Multi-Region Gateway Selection (tag-based API routing, region selectors)
-- [ ] F-08: GeoIP Filtering Policy (allow/deny country lists, MaxMind config, XFF handling)
-- [ ] F-09: HashiCorp Vault Secret Resource (KV v2, dynamic secrets, cache TTL, EL expression config)
-- [ ] F-10: Kafka Reporter Plugin config (topic mapping, Avro/JSON format, buffer settings)
-- [ ] F-11: Prometheus Alerting Rules (error rate, latency, quota, cert expiry thresholds)
-- [ ] F-12: Multi-Environment Promotion / APIOps (GKO CRDs, ArgoCD integration, Git-driven promotion)
-- [ ] F-13: Event-Native Bridging (Kafka/MQTT/RabbitMQ entrypoints, REST proxy config)
-
-## Gravitee Gateway Management UI
-- [ ] Gateway Deployments page (deploy/undeploy APIs to gateway clusters, sync status, blue/green)
-- [ ] Developer Portal management (themed portal config, API catalog publishing, documentation)
-- [ ] API Lifecycle page (draft → published → deprecated → retired, version promotion)
-- [ ] Gateway Clusters page (cluster health, node list, sharding tags, region assignment)
-- [ ] API Designer/Editor (visual flow editor for policies, request/response transformation chains)
-- [ ] Enhanced Policy Configuration (full Gravitee policy chain: request/response/connect phases, ordering, conditions)
-
-## Gravitee API Management Features (F-01 to F-13)
-- [ ] F-01: Data Masking Policy engine UI (JSONPath rules, pre-built rulesets for PAN/Aadhaar/PCI, per-API and global config)
-- [ ] F-03: Metering Policy + Lago Pipeline (custom metric extraction, Kafka topic config, Lago plan sync)
-- [ ] F-04: Enterprise OIDC SSO & Group Mapping (multi-IdP config, SAML, claim-to-role rules, JIT provisioning, SCIM)
-- [ ] F-06: Dynamic Client Registration (DCR) - RFC 7591/7592 config, auto-subscribe, credential rotation
-- [ ] F-07: Sharding Tags & Multi-Region Gateway Selection (tag-based API routing, region selectors)
-- [ ] F-08: GeoIP Filtering Policy (allow/deny country lists, MaxMind config, XFF handling)
-- [ ] F-09: HashiCorp Vault Secret Resource (KV v2, dynamic secrets, cache TTL, EL expression config)
-- [ ] F-10: Kafka Reporter Plugin config (topic mapping, Avro/JSON format, buffer settings)
-- [ ] F-11: Prometheus Alerting Rules (error rate, latency, quota, cert expiry thresholds)
-- [ ] F-12: Multi-Environment Promotion / APIOps (GKO CRDs, ArgoCD integration, Git-driven promotion)
-- [ ] F-13: Event-Native Bridging (Kafka/MQTT/RabbitMQ entrypoints, REST proxy config)
-
-## Gravitee Gateway Management UI
-- [ ] Gateway Deployments page (deploy/undeploy APIs to gateway clusters, sync status, blue/green)
-- [ ] Developer Portal management (themed portal config, API catalog publishing, documentation)
-- [ ] API Lifecycle page (draft -> published -> deprecated -> retired, version promotion)
-- [ ] Gateway Clusters page (cluster health, node list, sharding tags, region assignment)
-- [ ] API Designer/Editor (visual flow editor for policies, request/response transformation chains)
-- [ ] Enhanced Policy Configuration (full Gravitee policy chain: request/response/connect phases, ordering, conditions)
+## Remaining Enhancements
+- [ ] F-03: Metering Policy + Lago Pipeline detail page (custom metric extraction, Kafka topic config, Lago plan sync)
+- [ ] F-08: GeoIP Filtering Policy detail page (allow/deny country lists, MaxMind config, XFF handling)
+- [ ] F-09: HashiCorp Vault Secret Resource page (KV v2, dynamic secrets, cache TTL, EL expression config)
+- [ ] F-10: Kafka Reporter Plugin config page (topic mapping, Avro/JSON format, buffer settings)
+- [ ] API Lifecycle state machine page (draft → published → deprecated → retired, version promotion)
+- [ ] Gravitee gateway tests (clusters, deployments, policy chains, DCR, masking)

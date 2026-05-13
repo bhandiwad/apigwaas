@@ -72,6 +72,7 @@ const menuSections: MenuSection[] = [
     title: "API MANAGEMENT",
     items: [
       { icon: Globe, label: "APIs", path: "/apis" },
+      { icon: Activity, label: "API Lifecycle", path: "/api-lifecycle" },
       { icon: BookOpen, label: "Plans", path: "/plans" },
       { icon: Zap, label: "Consumer Apps", path: "/consumer-apps" },
       { icon: Key, label: "Subscriptions", path: "/subscriptions" },
@@ -83,11 +84,16 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: Server, label: "Clusters", path: "/gateway-clusters" },
       { icon: Rocket, label: "Deployments", path: "/deployments" },
+      { icon: Workflow, label: "API Designer", path: "/api-designer" },
       { icon: Workflow, label: "Policy Chains", path: "/policy-chains" },
       { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
+      { icon: Globe, label: "GeoIP Filtering", path: "/geoip-filtering" },
+      { icon: Key, label: "Vault Secrets", path: "/vault-secrets" },
       { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
       { icon: Radio, label: "Event Entrypoints", path: "/event-entrypoints" },
+      { icon: Globe, label: "Multi-Region", path: "/multi-region" },
       { icon: GitBranch, label: "Environments", path: "/environments" },
+      { icon: Radio, label: "Kafka Reporter", path: "/kafka-reporter" },
     ],
   },
   {

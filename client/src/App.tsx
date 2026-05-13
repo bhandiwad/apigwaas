@@ -38,6 +38,12 @@ import EnvironmentsPage from "./pages/Environments";
 import EventEntrypointsPage from "./pages/EventEntrypoints";
 import AlertsPage from "./pages/Alerts";
 import PolicyChainsPage from "./pages/PolicyChains";
+import GeoIpFilteringPage from "./pages/GeoIpFiltering";
+import VaultSecretsPage from "./pages/VaultSecrets";
+import ApiLifecyclePage from "./pages/ApiLifecycle";
+import KafkaReporterPage from "./pages/KafkaReporter";
+import ApiDesignerPage from "./pages/ApiDesigner";
+import MultiRegionPage from "./pages/MultiRegion";
 
 function Router() {
   return (
@@ -76,6 +82,12 @@ function Router() {
         <Route path="/environments" component={EnvironmentsPage} />
         <Route path="/event-entrypoints" component={EventEntrypointsPage} />
         <Route path="/alerts" component={AlertsPage} />
+        <Route path="/geoip-filtering" component={GeoIpFilteringPage} />
+        <Route path="/vault-secrets" component={VaultSecretsPage} />
+        <Route path="/api-lifecycle" component={ApiLifecyclePage} />
+        <Route path="/kafka-reporter" component={KafkaReporterPage} />
+        <Route path="/api-designer" component={ApiDesignerPage} />
+        <Route path="/multi-region" component={MultiRegionPage} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>
