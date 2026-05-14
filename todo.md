@@ -169,3 +169,10 @@
 - [x] Write integration tests for Gravitee client (5 tests passing)
 - [x] Fallback to local DB when Gravitee is unreachable (hybrid mode)
 - [x] Connection status indicator in header (Live/Local Mode badge)
+
+## Documentation & GitHub
+- [ ] Comprehensive README.md with architecture, setup, and usage
+- [ ] API Reference documentation (all tRPC endpoints)
+- [ ] Architecture documentation with system design
+- [ ] Deployment guide
+- [ ] Push code to GitHub repo: https://github.com/bhandiwad/apigwaas
