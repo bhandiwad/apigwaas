@@ -146,9 +146,9 @@
 - [x] Subscription and consumer app router validation tests
 
 ## Remaining Enhancements
-- [ ] F-03: Metering Policy + Lago Pipeline detail page (custom metric extraction, Kafka topic config, Lago plan sync)
-- [ ] F-08: GeoIP Filtering Policy detail page (allow/deny country lists, MaxMind config, XFF handling)
-- [ ] F-09: HashiCorp Vault Secret Resource page (KV v2, dynamic secrets, cache TTL, EL expression config)
-- [ ] F-10: Kafka Reporter Plugin config page (topic mapping, Avro/JSON format, buffer settings)
-- [ ] API Lifecycle state machine page (draft → published → deprecated → retired, version promotion)
-- [ ] Gravitee gateway tests (clusters, deployments, policy chains, DCR, masking)
+- [x] F-03: Metering Policy + Lago Pipeline detail page (custom metric extraction, Kafka topic config, Lago plan sync)
+- [x] F-08: GeoIP Filtering Policy detail page (allow/deny country lists, MaxMind config, XFF handling)
+- [x] F-09: HashiCorp Vault Secret Resource page (KV v2, dynamic secrets, cache TTL, EL expression config)
+- [x] F-10: Kafka Reporter Plugin config page (topic mapping, Avro/JSON format, buffer settings)
+- [x] API Lifecycle state machine page (draft → published → deprecated → retired, version promotion)
+- [x] Gravitee gateway tests (clusters, deployments, policy chains, DCR, masking)
