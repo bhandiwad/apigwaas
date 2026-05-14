@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter (host metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Gravitee Gateway metrics
+  - job_name: 'gravitee-gateway'
+    metrics_path: '/_node/metrics/prometheus'
+    basic_auth:
+      username: admin
+      password: admin
+    static_configs:
+      - targets: ['gravitee-gateway:18082']
+        labels:
+          component: 'gateway'
+
+  # Gravitee Management API metrics
+  - job_name: 'gravitee-management-api'
+    metrics_path: '/_node/metrics/prometheus'
+    basic_auth:
+      username: admin
+      password: admin
+    static_configs:
+      - targets: ['gravitee-management-api:18083']
+        labels:
+          component: 'management-api'
+
+  # Elasticsearch metrics
+  - job_name: 'elasticsearch'
+    metrics_path: '/_prometheus/metrics'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+
+  # Redis metrics (via redis_exporter if added)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  # MySQL metrics (via mysqld_exporter if added)
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql:3306']
+
+  # Nginx metrics (via nginx stub_status)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: '/health'

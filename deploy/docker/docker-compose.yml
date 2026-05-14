@@ -1,0 +1,293 @@
+# ============================================================================
+# CloudInfinit API Gateway - Full Stack Docker Compose
+# Includes: Platform App + Gravitee APIM + MySQL + MongoDB + Elasticsearch + Redis + Nginx
+# ============================================================================
+
+version: "3.9"
+
+x-gravitee-common: &gravitee-common
+  restart: unless-stopped
+  networks:
+    - apigw-network
+
+services:
+  # ─── Reverse Proxy ──────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: apigw-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - platform
+      - gravitee-gateway
+      - gravitee-management-api
+      - gravitee-portal-ui
+      - gravitee-console-ui
+    networks:
+      - apigw-network
+    restart: unless-stopped
+
+  # ─── CloudInfinit Platform ──────────────────────────────────────────────────
+  platform:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+    container_name: apigw-platform
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL:-mysql://cloudinfinit:cloudinfinit_secret@mysql:3306/cloudinfinit_apigw}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-minimum-32-chars}
+      - GRAVITEE_API_URL=http://gravitee-management-api:8083
+      - GRAVITEE_API_TOKEN=${GRAVITEE_API_TOKEN}
+      - GRAVITEE_ORG_ID=${GRAVITEE_ORG_ID:-DEFAULT}
+      - GRAVITEE_ENV_ID=${GRAVITEE_ENV_ID:-DEFAULT}
+      - VITE_APP_TITLE=${VITE_APP_TITLE:-CloudInfinit API Gateway}
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/trpc/system.health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - apigw-network
+    restart: unless-stopped
+
+  # ─── MySQL (Platform Database) ──────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: apigw-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+      MYSQL_DATABASE: cloudinfinit_apigw
+      MYSQL_USER: cloudinfinit
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cloudinfinit_secret}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init/mysql:/docker-entrypoint-initdb.d
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max-connections=500
+      --innodb-buffer-pool-size=256M
+      --slow-query-log=1
+      --long-query-time=2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - apigw-network
+    restart: unless-stopped
+
+  # ─── MongoDB (Gravitee Database) ────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: apigw-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin_secret}
+      MONGO_INITDB_DATABASE: gravitee
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - ./init/mongo:/docker-entrypoint-initdb.d
+    command: ["--wiredTigerCacheSizeGB", "0.5"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - apigw-network
+    restart: unless-stopped
+
+  # ─── Elasticsearch (Gravitee Analytics) ─────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.4
+    container_name: apigw-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=gravitee-es
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - apigw-network
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # ─── Redis (Gravitee Rate Limiting & Caching) ───────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: apigw-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redis_secret}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - apigw-network
+    restart: unless-stopped
+
+  # ─── Gravitee Management API ────────────────────────────────────────────────
+  gravitee-management-api:
+    image: graviteeio/apim-management-api:4.4
+    container_name: apigw-gravitee-mgmt-api
+    <<: *gravitee-common
+    ports:
+      - "8083:8083"
+    environment:
+      - gravitee_management_mongodb_uri=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-admin_secret}@mongodb:27017/gravitee?authSource=admin
+      - gravitee_analytics_elasticsearch_endpoints_0=http://elasticsearch:9200
+      - gravitee_ratelimit_redis_host=redis
+      - gravitee_ratelimit_redis_port=6379
+      - gravitee_ratelimit_redis_password=${REDIS_PASSWORD:-redis_secret}
+      - gravitee_reporters_elasticsearch_endpoints_0=http://elasticsearch:9200
+      - gravitee_services_core_http_enabled=true
+      - gravitee_services_core_http_port=18083
+      - gravitee_services_core_http_host=0.0.0.0
+      - gravitee_services_core_http_authentication_type=basic
+      - gravitee_services_core_http_authentication_users_admin=${GRAVITEE_ADMIN_PASSWORD:-admin}
+      - gravitee_api_rest_cors_allow-origin=*
+      - gravitee_email_enabled=false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18083/_node/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - gravitee-mgmt-plugins:/opt/graviteeio-management-api/plugins-ext
+
+  # ─── Gravitee Gateway ───────────────────────────────────────────────────────
+  gravitee-gateway:
+    image: graviteeio/apim-gateway:4.4
+    container_name: apigw-gravitee-gateway
+    <<: *gravitee-common
+    ports:
+      - "8082:8082"
+    environment:
+      - gravitee_management_mongodb_uri=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-admin_secret}@mongodb:27017/gravitee?authSource=admin
+      - gravitee_ratelimit_mongodb_uri=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-admin_secret}@mongodb:27017/gravitee?authSource=admin
+      - gravitee_ratelimit_redis_host=redis
+      - gravitee_ratelimit_redis_port=6379
+      - gravitee_ratelimit_redis_password=${REDIS_PASSWORD:-redis_secret}
+      - gravitee_reporters_elasticsearch_endpoints_0=http://elasticsearch:9200
+      - gravitee_services_core_http_enabled=true
+      - gravitee_services_core_http_port=18082
+      - gravitee_services_core_http_host=0.0.0.0
+      - gravitee_services_core_http_authentication_type=basic
+      - gravitee_services_core_http_authentication_users_admin=${GRAVITEE_ADMIN_PASSWORD:-admin}
+      - gravitee_tags=internal,external
+      - gravitee_tenant=DEFAULT
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18082/_node/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    volumes:
+      - gravitee-gw-plugins:/opt/graviteeio-gateway/plugins-ext
+
+  # ─── Gravitee Console UI ────────────────────────────────────────────────────
+  gravitee-console-ui:
+    image: graviteeio/apim-management-ui:4.4
+    container_name: apigw-gravitee-console
+    <<: *gravitee-common
+    ports:
+      - "8084:8080"
+    environment:
+      - MGMT_API_URL=http://gravitee-management-api:8083/management/
+    depends_on:
+      gravitee-management-api:
+        condition: service_healthy
+
+  # ─── Gravitee Developer Portal UI ──────────────────────────────────────────
+  gravitee-portal-ui:
+    image: graviteeio/apim-portal-ui:4.4
+    container_name: apigw-gravitee-portal
+    <<: *gravitee-common
+    ports:
+      - "8085:8080"
+    environment:
+      - PORTAL_API_URL=http://gravitee-management-api:8083/portal/
+    depends_on:
+      gravitee-management-api:
+        condition: service_healthy
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  mysql-data:
+    driver: local
+  mongodb-data:
+    driver: local
+  es-data:
+    driver: local
+  redis-data:
+    driver: local
+  gravitee-mgmt-plugins:
+    driver: local
+  gravitee-gw-plugins:
+    driver: local
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  apigw-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

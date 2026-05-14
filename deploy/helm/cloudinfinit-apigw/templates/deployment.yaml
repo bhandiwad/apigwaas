@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudinfinit-apigw.fullname" . }}
+  labels:
+    {{- include "cloudinfinit-apigw.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.platform.autoscaling.enabled }}
+  replicas: {{ .Values.platform.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cloudinfinit-apigw.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "cloudinfinit-apigw.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cloudinfinit-apigw.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: platform
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.platform.image.repository }}:{{ .Values.platform.image.tag }}"
+          imagePullPolicy: {{ .Values.platform.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.platform.service.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "{{ .Values.platform.service.port }}"
+            - name: NODE_ENV
+              value: "{{ .Values.platform.env.NODE_ENV }}"
+            {{- range .Values.platform.envSecrets }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "cloudinfinit-apigw.fullname" . }}-config
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.platform.healthcheck.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.platform.healthcheck.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.platform.healthcheck.liveness.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.platform.healthcheck.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.platform.healthcheck.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.platform.healthcheck.readiness.periodSeconds }}
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.platform.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.platform.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.platform.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.platform.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

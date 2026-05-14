@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gravitee-apim.fullname" . }}-console
+  labels:
+    app.kubernetes.io/component: console
+    {{- include "gravitee-apim.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.console.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: console
+      {{- include "gravitee-apim.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: console
+        {{- include "gravitee-apim.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: console-ui
+          image: "{{ .Values.console.image.repository }}:{{ .Values.console.image.tag }}"
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          ports:
+            - containerPort: 8002
+              protocol: TCP
+          env:
+            - name: MGMT_API_URL
+              value: "http://{{ include "gravitee-apim.fullname" . }}-management-api:8083/management"
+          resources:
+            {{- toYaml .Values.console.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8002
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gravitee-apim.fullname" . }}-console
+  labels:
+    app.kubernetes.io/component: console
+    {{- include "gravitee-apim.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP
+  selector:
+    app.kubernetes.io/component: console
+    {{- include "gravitee-apim.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: gravitee-apim
+description: Gravitee APIM deployment for CloudInfinit API Gateway
+type: application
+version: 1.0.0
+appVersion: "4.4.0"
+keywords:
+  - gravitee
+  - api-gateway
+  - api-management
+maintainers:
+  - name: CloudInfinit
+    email: platform@cloudinfinit.io
+dependencies:
+  - name: mongodb
+    version: "14.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: mongodb.enabled
+  - name: elasticsearch
+    version: "19.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: elasticsearch.enabled

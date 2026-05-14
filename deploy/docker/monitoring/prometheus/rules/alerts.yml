@@ -1,0 +1,103 @@
+groups:
+  - name: platform_alerts
+    rules:
+      - alert: PlatformDown
+        expr: up{job="platform"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CloudInfinit Platform is down"
+          description: "Platform has been unreachable for more than 1 minute."
+
+      - alert: GraviteeGatewayDown
+        expr: up{job="gravitee-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gravitee Gateway is down"
+          description: "Gateway has been unreachable for more than 1 minute."
+
+      - alert: GraviteeManagementDown
+        expr: up{job="gravitee-management-api"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gravitee Management API is down"
+          description: "Management API has been unreachable for more than 2 minutes."
+
+      - alert: HighGatewayLatency
+        expr: histogram_quantile(0.99, rate(gravitee_http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High gateway latency detected"
+          description: "P99 latency is above 2 seconds for the last 5 minutes."
+
+      - alert: HighErrorRate
+        expr: sum(rate(gravitee_http_requests_total{status=~"5.."}[5m])) / sum(rate(gravitee_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on gateway"
+          description: "More than 5% of requests are returning 5xx errors."
+
+      - alert: ElasticsearchDown
+        expr: up{job="elasticsearch"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch is down"
+          description: "Analytics storage is unreachable."
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90% for the last 5 minutes."
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is above 85%."
+
+  - name: database_alerts
+    rules:
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL is down"
+          description: "Platform database is unreachable."
+
+      - alert: MongoDBDown
+        expr: mongodb_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB is down"
+          description: "Gravitee database is unreachable."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Rate limiting cache is unreachable."

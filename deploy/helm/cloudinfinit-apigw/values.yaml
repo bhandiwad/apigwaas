@@ -1,0 +1,196 @@
+# ============================================================================
+# CloudInfinit API Gateway Platform - Helm Values
+# ============================================================================
+
+# -- Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# -- Platform application
+platform:
+  replicaCount: 2
+  image:
+    repository: cloudinfinit/apigw-platform
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env:
+    NODE_ENV: production
+  envSecrets:
+    - name: DATABASE_URL
+      secretName: platform-secrets
+      secretKey: database-url
+    - name: JWT_SECRET
+      secretName: platform-secrets
+      secretKey: jwt-secret
+    - name: GRAVITEE_API_URL
+      secretName: gravitee-secrets
+      secretKey: api-url
+    - name: GRAVITEE_API_TOKEN
+      secretName: gravitee-secrets
+      secretKey: api-token
+    - name: GRAVITEE_ORG_ID
+      secretName: gravitee-secrets
+      secretKey: org-id
+    - name: GRAVITEE_ENV_ID
+      secretName: gravitee-secrets
+      secretKey: env-id
+  healthcheck:
+    liveness:
+      path: /api/trpc/system.health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readiness:
+      path: /api/trpc/system.health
+      initialDelaySeconds: 10
+      periodSeconds: 5
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - cloudinfinit-apigw
+            topologyKey: kubernetes.io/hostname
+
+# -- Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: apigw.cloudinfinit.io
+      paths:
+        - path: /
+          pathType: Prefix
+          service: platform
+        - path: /gateway
+          pathType: Prefix
+          service: gravitee-gateway
+        - path: /management
+          pathType: Prefix
+          service: gravitee-management-api
+        - path: /console
+          pathType: Prefix
+          service: gravitee-console
+        - path: /developer-portal
+          pathType: Prefix
+          service: gravitee-portal
+  tls:
+    - secretName: apigw-tls
+      hosts:
+        - apigw.cloudinfinit.io
+
+# -- MySQL (Platform DB)
+mysql:
+  enabled: true
+  auth:
+    rootPassword: ""
+    database: cloudinfinit_apigw
+    username: cloudinfinit
+    password: ""
+    existingSecret: mysql-secrets
+  primary:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+  metrics:
+    enabled: true
+
+# -- Redis (Rate Limiting)
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: redis-secrets
+    existingSecretPasswordKey: redis-password
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    persistence:
+      enabled: true
+      size: 5Gi
+  replica:
+    replicaCount: 2
+  metrics:
+    enabled: true
+
+# -- Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# -- Network Policies
+networkPolicy:
+  enabled: true
+
+# -- Pod Security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- External Secrets Operator integration
+externalSecrets:
+  enabled: false
+  region: ap-south-1
+
+# -- Environment identifier
+environment: staging
+
+# -- Secrets reference
+secrets:
+  existingSecret: ""

@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-management-api
+  labels:
+    app.kubernetes.io/name: gravitee-apim
+    app.kubernetes.io/component: management-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.managementApi.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gravitee-apim
+      app.kubernetes.io/component: management-api
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gravitee-apim
+        app.kubernetes.io/component: management-api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: management-api
+          image: "{{ .Values.managementApi.image.repository }}:{{ .Values.managementApi.image.tag }}"
+          imagePullPolicy: {{ .Values.managementApi.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.managementApi.service.port }}
+            - name: internal
+              containerPort: {{ .Values.managementApi.service.internalPort }}
+          env:
+            - name: JAVA_OPTS
+              value: "{{ .Values.managementApi.jvmOpts }}"
+            - name: gravitee_management_mongodb_uri
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-mongodb-uri
+                  key: uri
+            - name: gravitee_analytics_elasticsearch_endpoints_0
+              value: "http://{{ .Release.Name }}-elasticsearch:9200"
+            - name: gravitee_ratelimit_redis_host
+              value: "{{ .Values.redis.host }}"
+            - name: gravitee_ratelimit_redis_port
+              value: "{{ .Values.redis.port }}"
+            - name: gravitee_ratelimit_redis_password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.existingSecret }}
+                  key: redis-password
+            {{- range .Values.managementApi.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /_node/health
+              port: internal
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /_node/health
+              port: internal
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.managementApi.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-management-api
+  labels:
+    app.kubernetes.io/name: gravitee-apim
+    app.kubernetes.io/component: management-api
+spec:
+  type: {{ .Values.managementApi.service.type }}
+  ports:
+    - port: {{ .Values.managementApi.service.port }}
+      targetPort: http
+      name: http
+    - port: {{ .Values.managementApi.service.internalPort }}
+      targetPort: internal
+      name: internal
+  selector:
+    app.kubernetes.io/name: gravitee-apim
+    app.kubernetes.io/component: management-api
+    app.kubernetes.io/instance: {{ .Release.Name }}

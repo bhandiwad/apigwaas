@@ -1,0 +1,23 @@
+apiVersion: v2
+name: cloudinfinit-apigw
+description: CloudInfinit API Gateway Platform - Enterprise API Management
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - api-gateway
+  - gravitee
+  - api-management
+  - multi-tenant
+maintainers:
+  - name: CloudInfinit
+    email: platform@cloudinfinit.io
+dependencies:
+  - name: mysql
+    version: "9.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: mysql.enabled
+  - name: redis
+    version: "18.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

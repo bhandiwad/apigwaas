@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudinfinit-apigw.fullname" . }}-config
+  labels:
+    {{- include "cloudinfinit-apigw.labels" . | nindent 4 }}
+data:
+  VITE_APP_TITLE: "CloudInfinit API Gateway"
+  NODE_ENV: "{{ .Values.platform.env.NODE_ENV }}"

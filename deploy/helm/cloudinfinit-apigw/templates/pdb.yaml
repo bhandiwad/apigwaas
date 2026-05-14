@@ -1,0 +1,13 @@
+{{- if .Values.platform.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cloudinfinit-apigw.fullname" . }}
+  labels:
+    {{- include "cloudinfinit-apigw.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.platform.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cloudinfinit-apigw.selectorLabels" . | nindent 6 }}
+{{- end }}

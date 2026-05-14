@@ -1,0 +1,26 @@
+# ============================================================================
+# CloudInfinit API Gateway - Development Dockerfile
+# Supports hot-reload via volume mounts and tsx watch
+# ============================================================================
+
+FROM node:22-alpine
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
+
+# Install all dependencies (including devDependencies)
+RUN pnpm install --frozen-lockfile
+
+# Copy source (will be overridden by volume mounts in dev)
+COPY . .
+
+# Expose app port and debug port
+EXPOSE 3000 9229
+
+# Start with tsx watch for hot-reload
+CMD ["pnpm", "run", "dev"]
