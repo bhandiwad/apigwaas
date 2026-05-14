@@ -1,0 +1,65 @@
+Gravitee Management API Reference Notes
+=========================================
+
+Base URL: http://{gravitee-host}:8083
+
+Two main components:
+1. /management - V1 endpoints for v2 APIs, applications, subscriptions, users, etc.
+   - OpenAPI spec at: /management/openapi.yaml
+2. /management/v2 - V2 endpoints for v4 APIs, plugins, installation
+   - Split into groups:
+     - v4 APIs: /management/v2/openapi-apis.yaml
+     - Plugins: /management/v2/openapi-plugins.yaml
+     - Installation: /management/v2/openapi-installation.yaml
+     - OEM Customizations: /management/v2/openapi-ui.yaml
+3. /portal - Developer Portal API
+   - Spec at: /portal/openapi
+
+Key endpoints (v1 - /management):
+- GET /management/organizations/{orgId}/environments/{envId}/apis - List APIs
+- POST /management/organizations/{orgId}/environments/{envId}/apis - Create API
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId} - Get API
+- PUT /management/organizations/{orgId}/environments/{envId}/apis/{apiId} - Update API
+- DELETE /management/organizations/{orgId}/environments/{envId}/apis/{apiId} - Delete API
+- POST /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/deploy - Deploy API
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/state - Get API state
+- POST /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/start - Start API
+- POST /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/stop - Stop API
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/plans - List plans
+- POST /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/plans - Create plan
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/subscriptions - List subscriptions
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/analytics - API analytics
+- GET /management/organizations/{orgId}/environments/{envId}/apis/{apiId}/health - API health
+- GET /management/organizations/{orgId}/environments/{envId}/applications - List applications
+- POST /management/organizations/{orgId}/environments/{envId}/applications - Create application
+- GET /management/organizations/{orgId}/environments/{envId}/applications/{appId}/subscriptions - App subscriptions
+- GET /management/organizations/{orgId}/environments/{envId}/instances - List gateway instances
+- GET /management/organizations/{orgId}/environments/{envId}/instances/{instanceId} - Get instance details
+
+Key endpoints (v2 - /management/v2):
+- GET /management/v2/environments/{envId}/apis - List v4 APIs
+- POST /management/v2/environments/{envId}/apis - Create v4 API
+- GET /management/v2/environments/{envId}/apis/{apiId} - Get v4 API
+- PUT /management/v2/environments/{envId}/apis/{apiId} - Update v4 API
+- POST /management/v2/environments/{envId}/apis/{apiId}/_deploy - Deploy v4 API
+- POST /management/v2/environments/{envId}/apis/{apiId}/_start - Start v4 API
+- POST /management/v2/environments/{envId}/apis/{apiId}/_stop - Stop v4 API
+- GET /management/v2/environments/{envId}/apis/{apiId}/plans - List plans
+- GET /management/v2/environments/{envId}/apis/{apiId}/subscriptions - List subscriptions
+- GET /management/v2/environments/{envId}/apis/{apiId}/analytics - Analytics
+- POST /management/v2/environments/{envId}/apis/_import/definition - Import API definition
+- POST /management/v2/environments/{envId}/apis/_import/openapi - Import OpenAPI spec
+- GET /management/v2/plugins - List plugins
+- GET /management/v2/environments/{envId}/installations - Installation info
+
+Authentication:
+- Bearer token (Personal Access Token or Service Account token)
+- Header: Authorization: Bearer {token}
+- Or basic auth with admin credentials
+
+Portal API:
+- GET /portal/environments/{envId}/apis - List published APIs
+- GET /portal/environments/{envId}/apis/{apiId} - Get API details
+- GET /portal/environments/{envId}/applications - List applications
+- POST /portal/environments/{envId}/applications - Register application
+- GET /portal/environments/{envId}/subscriptions - List subscriptions

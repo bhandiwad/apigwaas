@@ -7,4 +7,9 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Gravitee Management API
+  graviteeApiUrl: process.env.GRAVITEE_API_URL ?? "",
+  graviteeApiToken: process.env.GRAVITEE_API_TOKEN ?? "",
+  graviteeOrgId: process.env.GRAVITEE_ORG_ID ?? "DEFAULT",
+  graviteeEnvId: process.env.GRAVITEE_ENV_ID ?? "DEFAULT",
 };

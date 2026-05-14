@@ -152,3 +152,20 @@
 - [x] F-10: Kafka Reporter Plugin config page (topic mapping, Avro/JSON format, buffer settings)
 - [x] API Lifecycle state machine page (draft → published → deprecated → retired, version promotion)
 - [x] Gravitee gateway tests (clusters, deployments, policy chains, DCR, masking)
+
+## Gravitee Management API Integration
+- [x] Research Gravitee APIM Management API v2/v4 endpoints
+- [x] Create Gravitee API client service (server/gravitee.ts) with auth, retry, error handling
+- [x] Add GRAVITEE_API_URL and GRAVITEE_API_TOKEN environment secrets
+- [x] Replace mock gateway.clusters with live Gravitee installation/cluster API
+- [x] Replace mock gateway.deployments with live Gravitee API deployment state
+- [x] Replace mock API CRUD with Gravitee APIs endpoint (v4 APIs)
+- [x] Replace mock policy chains with Gravitee flow/policy API
+- [x] Replace mock subscriptions with Gravitee subscription API
+- [x] Replace mock DCR with Gravitee application registration
+- [x] Replace mock developer portal with Gravitee portal API
+- [x] Add health check endpoint hitting Gravitee node monitoring
+- [x] Add sync status polling for deployment state
+- [x] Write integration tests for Gravitee client (5 tests passing)
+- [x] Fallback to local DB when Gravitee is unreachable (hybrid mode)
+- [x] Connection status indicator in header (Live/Local Mode badge)

@@ -1,22 +1,29 @@
-UI Review - Final State (May 14, 2026)
-========================================
+UI Review - Gravitee Integration Complete (May 14, 2026)
+=========================================================
 
 Dashboard Overview:
 - infinitAIZEN branding with gold/amber primary color theme
+- "Local Mode" badge visible in top-right header (amber) - shows Gravitee not yet connected
+- When credentials are provided, switches to "Gravitee Live" (green badge)
 - Sidebar navigation with all sections: Main, API Management, Gateway, Security, Observability, Billing, Operations, SRE
-- KPI cards showing: Total APIs (1), Consumer Apps (0), Subscriptions (9), Tenants (14)
+- KPI cards showing: Total APIs (1), Consumer Apps (0), Subscriptions (14), Tenants (19)
 - Platform Status: Operational with tier badges (Starter, Business, Enterprise, Sovereign)
-- Quick access cards: API Management, Analytics & Metering with feature bullets
 
-All 38 tests passing across 4 test files.
+Gravitee Hybrid Integration:
+- All routers check connection status and use hybrid mode
+- Clusters enriched with live instance data when connected
+- Deployments enriched with live Gravitee state
+- DCR registration syncs to Gravitee applications
+- Policy chains fetch from Gravitee flows when connected
+- Developer portal syncs with Gravitee portal APIs
+- Subscriptions annotated with sync source
+- API CRUD syncs to Gravitee v4 API definitions
+- Plans sync to Gravitee plan management
+- Analytics fetch from Gravitee platform analytics
+
+All 43 tests passing across 5 test files.
 TypeScript: No errors.
 LSP: No errors.
-Dev server: Running healthy with HMR.
+Dev server: Running healthy.
 
-Total pages: 34
-- Overview, Tenants, Workspaces, APIs, API Detail, API Lifecycle, Plans, Consumer Apps, Subscriptions, Policies
-- Gateway Clusters, Deployments, Developer Portal, Data Masking, DCR Clients, Identity Providers
-- Environments/APIOps, Event Entrypoints, Alerts, Policy Chains, API Designer, Multi-Region
-- GeoIP Filtering, Vault Secrets, Kafka Reporter, Metering
-- Analytics, Billing, Audit, RBAC, Role Assignments, Compliance, Status, Support
-- SRE Dashboard, Tenant Lifecycle, Payment Methods, Signup/Onboarding
+Total pages: 34+

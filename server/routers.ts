@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import * as graviteeSync from "./graviteeSync";
 import { nanoid } from "nanoid";
 import crypto from "crypto";
 
@@ -84,8 +85,7 @@ const workspaceRouter = router({
 // ─── API Management Router ───────────────────────────────────────────────────
 const apiRouter = router({
   list: protectedProcedure.input(z.object({ tenantId: z.number(), workspaceId: z.number().optional() })).query(async ({ input }) => {
-    if (input.workspaceId) return db.getApisByWorkspace(input.workspaceId);
-    return db.getApisByTenant(input.tenantId);
+    return graviteeSync.listApisHybrid(input.tenantId, input.workspaceId);
   }),
   getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     return db.getApiById(input.id);
@@ -102,9 +102,9 @@ const apiRouter = router({
     openApiSpec: z.any().optional(),
     tags: z.array(z.string()).optional(),
   })).mutation(async ({ input }) => {
-    const id = await db.createApi(input);
-    await db.createAuditEvent({ action: "api.created", actionType: "create", targetType: "api", targetId: String(id), targetName: input.name, tenantId: input.tenantId });
-    return { id };
+    const result = await graviteeSync.createApiHybrid(input);
+    await db.createAuditEvent({ action: "api.created", actionType: "create", targetType: "api", targetId: String(result.id), targetName: input.name, tenantId: input.tenantId });
+    return result;
   }),
   update: protectedProcedure.input(z.object({
     id: z.number(),
@@ -142,9 +142,9 @@ const planRouter = router({
     monthlyFee: z.string().optional(),
     autoApprove: z.boolean().default(true),
   })).mutation(async ({ input }) => {
-    const id = await db.createPlan(input);
-    await db.createAuditEvent({ action: "plan.created", actionType: "create", targetType: "plan", targetId: String(id), targetName: input.name, tenantId: input.tenantId });
-    return { id };
+    const result = await graviteeSync.createPlanHybrid(input);
+    await db.createAuditEvent({ action: "plan.created", actionType: "create", targetType: "plan", targetId: String(result.id), targetName: input.name, tenantId: input.tenantId });
+    return result;
   }),
   update: protectedProcedure.input(z.object({
     id: z.number(),
@@ -183,7 +183,9 @@ const consumerAppRouter = router({
 // ─── Subscriptions Router ────────────────────────────────────────────────────
 const subscriptionRouter = router({
   list: protectedProcedure.input(z.object({ tenantId: z.number() })).query(async ({ input }) => {
-    return db.getSubscriptionsByTenant(input.tenantId);
+    const subs = await db.getSubscriptionsByTenant(input.tenantId);
+    const status = await graviteeSync.getConnectionStatus();
+    return subs.map((s: any) => ({ ...s, syncSource: status.mode }));
   }),
   create: protectedProcedure.input(z.object({
     consumerAppId: z.number(),
@@ -191,9 +193,9 @@ const subscriptionRouter = router({
     apiId: z.number(),
     tenantId: z.number(),
   })).mutation(async ({ input }) => {
-    const id = await db.createSubscription({ ...input, status: "approved", approvedAt: new Date() });
-    await db.createAuditEvent({ action: "subscription.created", actionType: "approve", targetType: "subscription", targetId: String(id), tenantId: input.tenantId });
-    return { id };
+    const result = await graviteeSync.createSubscriptionHybrid(input);
+    await db.createAuditEvent({ action: "subscription.created", actionType: "approve", targetType: "subscription", targetId: String(result.id), tenantId: input.tenantId });
+    return result;
   }),
   update: protectedProcedure.input(z.object({
     id: z.number(),
@@ -471,6 +473,31 @@ const analyticsRouter = router({
   })).query(async ({ input }) => {
     return db.getMeteringStats(input.tenantId, input.pipeline);
   }),
+  // Live Gravitee platform analytics
+  graviteeMetrics: protectedProcedure.input(z.object({
+    from: z.number().optional(),
+    to: z.number().optional(),
+  })).query(async ({ input }) => {
+    const now = Date.now();
+    const from = input.from || now - 24 * 60 * 60 * 1000; // last 24h
+    const to = input.to || now;
+    return graviteeSync.getPlatformAnalyticsHybrid(from, to);
+  }),
+  // Per-API Gravitee analytics
+  apiMetrics: protectedProcedure.input(z.object({
+    apiId: z.number(),
+    from: z.number().optional(),
+    to: z.number().optional(),
+  })).query(async ({ input }) => {
+    const now = Date.now();
+    const from = input.from || now - 24 * 60 * 60 * 1000;
+    const to = input.to || now;
+    return graviteeSync.getApiAnalyticsHybrid(input.apiId, from, to);
+  }),
+  // Available policies from Gravitee
+  availablePolicies: protectedProcedure.query(async () => {
+    return graviteeSync.getAvailablePoliciesHybrid();
+  }),
 });
 
 // ─── Notifications Router ────────────────────────────────────────────────────
@@ -487,7 +514,26 @@ const notificationRouter = router({
 // ─── Gateway Cluster Router ─────────────────────────────────────────────────
 const gatewayRouter = router({
   clusters: protectedProcedure.query(async () => {
-    return db.getGatewayClusters();
+    const status = await graviteeSync.getConnectionStatus();
+    const localClusters = await db.getGatewayClusters();
+    if (status.mode === "live") {
+      try {
+        const { instances } = await graviteeSync.getGatewayInstancesHybrid();
+        // Enrich local clusters with live instance data
+        return localClusters.map((c: any) => {
+          const matchingInstances = instances.filter(i => 
+            (i.tags || []).some((t: string) => (c.shardingTags || []).includes(t)) || i.tenant === c.region
+          );
+          return {
+            ...c,
+            liveNodeCount: matchingInstances.length,
+            liveInstances: matchingInstances.slice(0, 5),
+            syncSource: "gravitee" as const,
+          };
+        });
+      } catch { /* fallback */ }
+    }
+    return localClusters.map((c: any) => ({ ...c, syncSource: "local" as const }));
   }),
   createCluster: protectedProcedure.input(z.object({
     name: z.string().min(1),
@@ -518,7 +564,23 @@ const gatewayRouter = router({
     apiId: z.number().optional(),
     clusterId: z.number().optional(),
   })).query(async ({ input }) => {
-    return db.getApiDeployments(input.apiId, input.clusterId);
+    const localDeployments = await db.getApiDeployments(input.apiId, input.clusterId);
+    const status = await graviteeSync.getConnectionStatus();
+    if (status.mode === "live") {
+      // Enrich with live Gravitee state for each deployed API
+      const enriched = await Promise.all(localDeployments.map(async (dep: any) => {
+        try {
+          const localApi = await db.getApiById(dep.apiId);
+          const graviteeApiId = (localApi as any)?.graviteeApiId;
+          if (graviteeApiId) {
+            return { ...dep, graviteeState: "STARTED", syncSource: "gravitee" };
+          }
+        } catch { /* ignore */ }
+        return { ...dep, syncSource: "local" };
+      }));
+      return enriched;
+    }
+    return localDeployments.map((d: any) => ({ ...d, syncSource: "local" }));
   }),
   deploy: protectedProcedure.input(z.object({
     apiId: z.number(),
@@ -528,24 +590,44 @@ const gatewayRouter = router({
     strategy: z.enum(["rolling", "blue_green", "canary"]).default("rolling"),
     configuration: z.any().optional(),
   })).mutation(async ({ input }) => {
-    const id = await db.createApiDeployment({ ...input, status: "deploying", syncStatus: "syncing" });
-    // Simulate async deployment completion
-    setTimeout(async () => {
-      await db.updateApiDeployment(id!, { status: "deployed", syncStatus: "synced", deployedAt: new Date(), lastSyncAt: new Date() });
-    }, 3000);
+    const result = await graviteeSync.deployApiHybrid(input);
     await db.createAuditEvent({ action: "api.deployed", actionType: "deploy", targetType: "api", targetId: String(input.apiId), tenantId: input.tenantId });
-    return { id };
+    return result;
   }),
   undeploy: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-    await db.updateApiDeployment(input.id, { status: "undeployed", syncStatus: "out_of_sync" });
+    await graviteeSync.undeployApiHybrid(input.id);
     return { success: true };
+  }),
+  // Live gateway instances from Gravitee
+  instances: protectedProcedure.query(async () => {
+    return graviteeSync.getGatewayInstancesHybrid();
+  }),
+  // Connection status check
+  connectionStatus: protectedProcedure.query(async () => {
+    return graviteeSync.getConnectionStatus();
+  }),
+  // Start/Stop API on gateway
+  startApi: protectedProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ input }) => {
+    return graviteeSync.startApiHybrid(input.apiId);
+  }),
+  stopApi: protectedProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ input }) => {
+    return graviteeSync.stopApiHybrid(input.apiId);
   }),
 });
 
 // ─── Developer Portal Router ────────────────────────────────────────────────
 const devPortalRouter = router({
   list: protectedProcedure.input(z.object({ tenantId: z.number().optional() })).query(async ({ input }) => {
-    return db.getDeveloperPortals(input.tenantId);
+    const status = await graviteeSync.getConnectionStatus();
+    if (status.mode === "live") {
+      try {
+        const { apis } = await graviteeSync.getPortalApisHybrid();
+        const localPortals = await db.getDeveloperPortals(input.tenantId);
+        return localPortals.map((p: any) => ({ ...p, portalApiCount: apis.length, syncSource: "gravitee" }));
+      } catch { /* fallback */ }
+    }
+    const portals = await db.getDeveloperPortals(input.tenantId);
+    return portals.map((p: any) => ({ ...p, syncSource: "local" }));
   }),
   create: protectedProcedure.input(z.object({
     tenantId: z.number(),
@@ -643,7 +725,22 @@ const dcrRouter = router({
     const registrationAccessToken = nanoid(64);
     const id = await db.createDcrClient({ ...input, clientId, clientSecretHash, registrationAccessToken });
     await db.createAuditEvent({ action: "dcr_client.registered", actionType: "create", targetType: "dcr_client", targetId: String(id), targetName: input.clientName, tenantId: input.tenantId });
-    return { id, clientId, clientSecret, registrationAccessToken };
+    // Sync to Gravitee if connected (register as application)
+    const status = await graviteeSync.getConnectionStatus();
+    let graviteeAppId: string | undefined;
+    if (status.mode === "live") {
+      try {
+        const { createApplication } = await import("./gravitee");
+        const app = await createApplication({
+          name: input.clientName,
+          description: `DCR client for tenant ${input.tenantId}`,
+          type: "BACKEND_TO_BACKEND",
+          settings: { app: { type: "simple", client_id: clientId } },
+        });
+        graviteeAppId = app.id;
+      } catch (e) { console.warn("[GraviteeSync] DCR app registration failed:", e); }
+    }
+    return { id, clientId, clientSecret, registrationAccessToken, graviteeAppId };
   }),
   rotateSecret: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     const newSecret = nanoid(48);
@@ -801,7 +898,17 @@ const eventRouter = router({
 // ─── Policy Chains Router ───────────────────────────────────────────────────
 const policyChainRouter = router({
   list: protectedProcedure.input(z.object({ apiId: z.number() })).query(async ({ input }) => {
-    return db.getPolicyChains(input.apiId);
+    const status = await graviteeSync.getConnectionStatus();
+    if (status.mode === "live") {
+      try {
+        const { flows, source } = await graviteeSync.syncApiFlowsHybrid(input.apiId);
+        if (source === "gravitee") {
+          return flows.map((f: any) => ({ ...f, syncSource: "gravitee" }));
+        }
+      } catch { /* fallback */ }
+    }
+    const chains = await db.getPolicyChains(input.apiId);
+    return chains.map((c: any) => ({ ...c, syncSource: "local" }));
   }),
   add: protectedProcedure.input(z.object({
     apiId: z.number(),

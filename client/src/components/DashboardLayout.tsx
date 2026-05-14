@@ -53,6 +53,8 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { trpc } from "@/lib/trpc";
 
 type MenuSection = {
   title: string;
@@ -199,6 +201,39 @@ export default function DashboardLayout({
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
+  );
+}
+
+// ─── Gravitee Connection Status Badge ─────────────────────────────────────────
+function GraviteeStatusBadge() {
+  const { data: status } = trpc.gateway.connectionStatus.useQuery(undefined, {
+    refetchInterval: 30000, // Check every 30s
+    retry: false,
+  });
+
+  if (!status) {
+    return (
+      <Badge variant="outline" className="text-[11px] gap-1.5 font-normal px-2 py-0.5 border-muted-foreground/30">
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
+        Checking...
+      </Badge>
+    );
+  }
+
+  if (status.connected) {
+    return (
+      <Badge variant="outline" className="text-[11px] gap-1.5 font-normal px-2 py-0.5 border-emerald-500/30 text-emerald-600 bg-emerald-50">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Gravitee Live
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="text-[11px] gap-1.5 font-normal px-2 py-0.5 border-amber-500/30 text-amber-600 bg-amber-50">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+      Local Mode
+    </Badge>
   );
 }
 
@@ -371,19 +406,19 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg" />
-              <span className="font-medium text-sm text-foreground">
-                {activeMenuItem?.label ?? "Dashboard"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-muted-foreground" />
-            </div>
+        {/* Top header bar with page title and Gravitee connection status */}
+        <div className="flex border-b h-14 items-center justify-between bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex items-center gap-2">
+            {isMobile && <SidebarTrigger className="h-9 w-9 rounded-lg" />}
+            <span className="font-medium text-sm text-foreground">
+              {activeMenuItem?.label ?? "Dashboard"}
+            </span>
           </div>
-        )}
+          <div className="flex items-center gap-3">
+            <GraviteeStatusBadge />
+            <Bell className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" />
+          </div>
+        </div>
         <main className="flex-1 p-6 bg-background">{children}</main>
       </SidebarInset>
     </>
