@@ -18,6 +18,7 @@ import AnalyticsPage from "./pages/Analytics";
 import MeteringPage from "./pages/Metering";
 import BillingPage from "./pages/Billing";
 import AuditPage from "./pages/Audit";
+import LogsPage from "./pages/Logs";
 import RbacPage from "./pages/Rbac";
 import CompliancePage from "./pages/Compliance";
 import StatusPage from "./pages/Status";
@@ -43,14 +44,26 @@ import VaultSecretsPage from "./pages/VaultSecrets";
 import ApiLifecyclePage from "./pages/ApiLifecycle";
 import KafkaReporterPage from "./pages/KafkaReporter";
 import ApiDesignerPage from "./pages/ApiDesigner";
-import MultiRegionPage from "./pages/MultiRegion";
+import LoginPage from "./pages/Login";
+import ResetPasswordPage from "./pages/ResetPassword";
+import AcceptInvitePage from "./pages/AcceptInvite";
+import TenantDetailPage from "./pages/TenantDetail";
+import GitOpsPipelinePage from "./pages/GitOpsPipeline";
+import DeveloperPortalView from "./pages/DeveloperPortalView";
 
 function Router() {
   return (
-    <DashboardLayout>
-      <Switch>
-        <Route path="/" component={Home} />
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/accept-invite" component={AcceptInvitePage} />
+      <Route path="/portal" component={DeveloperPortalView} />
+      <Route>
+        <DashboardLayout>
+          <Switch>
+            <Route path="/" component={Home} />
         <Route path="/tenants" component={TenantsPage} />
+        <Route path="/tenants/:id" component={TenantDetailPage} />
         <Route path="/tenant-lifecycle" component={TenantLifecyclePage} />
         <Route path="/workspaces" component={WorkspacesPage} />
         <Route path="/apis" component={ApisPage} />
@@ -64,6 +77,7 @@ function Router() {
         <Route path="/metering" component={MeteringPage} />
         <Route path="/billing" component={BillingPage} />
         <Route path="/audit" component={AuditPage} />
+        <Route path="/logs" component={LogsPage} />
         <Route path="/rbac" component={RbacPage} />
         <Route path="/compliance" component={CompliancePage} />
         <Route path="/status" component={StatusPage} />
@@ -85,12 +99,14 @@ function Router() {
         <Route path="/geoip-filtering" component={GeoIpFilteringPage} />
         <Route path="/vault-secrets" component={VaultSecretsPage} />
         <Route path="/api-lifecycle" component={ApiLifecyclePage} />
+        <Route path="/gitops-pipeline" component={GitOpsPipelinePage} />
         <Route path="/kafka-reporter" component={KafkaReporterPage} />
         <Route path="/api-designer" component={ApiDesignerPage} />
-        <Route path="/multi-region" component={MultiRegionPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </DashboardLayout>
+            <Route component={NotFound} />
+          </Switch>
+        </DashboardLayout>
+      </Route>
+    </Switch>
   );
 }
 

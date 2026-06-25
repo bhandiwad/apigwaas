@@ -5,14 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 export default function WorkspacesPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: workspaces, isLoading, refetch } = trpc.workspace.list.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const [, navigate] = useLocation();
+  const { data: workspaces, isLoading, refetch } = trpc.workspace.list.useQuery(undefined);
   const createMutation = trpc.workspace.create.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Workspace created"); } });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "" });
@@ -35,7 +35,7 @@ export default function WorkspacesPage() {
             <div className="space-y-4 mt-4">
               <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Production" /></div>
               <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Production environment" /></div>
-              <Button className="w-full" onClick={() => createMutation.mutate({ tenantId: defaultTenantId, ...form })} disabled={!form.name || createMutation.isPending}>
+              <Button className="w-full" onClick={() => createMutation.mutate({ ...form })} disabled={!form.name || createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create Workspace"}
               </Button>
             </div>
@@ -50,11 +50,14 @@ export default function WorkspacesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {(workspaces as any[])?.map((ws) => (
-            <Card key={ws.id} className="border border-border/60 hover:shadow-md transition-shadow">
+            <Card key={ws.id} onClick={() => navigate(`/apis?workspaceId=${ws.id}&workspaceName=${encodeURIComponent(ws.name)}`)} className="border border-border/60 hover:shadow-md hover:border-primary/40 transition-all cursor-pointer">
               <CardContent className="p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><Layers className="h-4 w-4 text-primary" /></div>
-                  <div><h3 className="font-semibold text-sm">{ws.name}</h3><p className="text-xs text-muted-foreground">{ws.slug}</p></div>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><Layers className="h-4 w-4 text-primary" /></div>
+                    <div><h3 className="font-semibold text-sm">{ws.name}</h3><p className="text-xs text-muted-foreground">{ws.slug}</p></div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                 </div>
                 <Badge variant="secondary" className={statusColors[ws.status] || ""}>{ws.status}</Badge>
                 {ws.description && <p className="text-xs text-muted-foreground mt-2">{ws.description}</p>}

@@ -10,10 +10,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function BillingPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: invoices, isLoading, refetch } = trpc.billing.invoices.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
-  const { data: usage } = trpc.billing.usage.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: invoices, isLoading, refetch } = trpc.billing.invoices.useQuery(undefined);
+  const { data: usage } = trpc.billing.usage.useQuery({});
   const createInvoiceMutation = trpc.billing.createInvoice.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Invoice generated"); } });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ subtotal: "", cgst: "", sgst: "", igst: "", total: "" });
@@ -27,8 +25,9 @@ export default function BillingPage() {
   const serviceCredits = invoiceList.reduce((sum, i) => sum + parseFloat(i.serviceCredits || "0"), 0);
 
   // Usage summary
-  const totalCalls = (usage as any[])?.reduce((sum: number, u: any) => sum + (u.apiCalls || 0), 0) || 0;
-  const totalDataGb = (usage as any[])?.reduce((sum: number, u: any) => sum + parseFloat(u.dataTransferMb || "0"), 0) / 1024 || 0;
+  const usageRows: any[] = (usage as any)?.usage ?? [];
+  const totalCalls = usageRows.reduce((sum: number, u: any) => sum + (u.apiCalls || 0), 0);
+  const totalDataGb = usageRows.reduce((sum: number, u: any) => sum + parseFloat(u.dataTransferMb || "0"), 0) / 1024;
 
   return (
     <div className="space-y-6">
@@ -56,7 +55,6 @@ export default function BillingPage() {
                 const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
                 const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
                 createInvoiceMutation.mutate({
-                  tenantId: defaultTenantId,
                   periodStart,
                   periodEnd,
                   lineItems: [{ description: "API Gateway Usage", amount: form.subtotal }],
@@ -115,7 +113,7 @@ export default function BillingPage() {
               <p className="text-sm font-medium text-red-800">Dunning: {overdueInvoices.length} overdue invoice{overdueInvoices.length > 1 ? "s" : ""}</p>
               <p className="text-xs text-red-600">{overdueInvoices.map(i => i.invoiceNumber).join(", ")} — Retry payment or escalate.</p>
             </div>
-            <Button variant="outline" size="sm" className="ml-auto border-red-300 text-red-700 hover:bg-red-100" onClick={() => toast.info("Payment retry initiated")}>Retry Payment</Button>
+            <span className="ml-auto text-xs text-red-600 font-medium">Contact billing support to resolve</span>
           </CardContent>
         </Card>
       )}

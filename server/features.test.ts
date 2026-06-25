@@ -11,6 +11,7 @@ function createAdminContext(): TrpcContext {
       name: "Admin User",
       loginMethod: "manus",
       role: "admin",
+      tenantId: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
@@ -25,8 +26,7 @@ describe("audit router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Should accept valid format
-    const result = await caller.audit.export({ tenantId: 1, format: "csv" });
+    const result = await caller.audit.export({ format: "csv" });
     expect(result).toHaveProperty("content");
     expect(result).toHaveProperty("signature");
     expect(result).toHaveProperty("format", "csv");
@@ -40,7 +40,7 @@ describe("audit router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.audit.export({ tenantId: 1, format: "jsonl" });
+    const result = await caller.audit.export({ format: "jsonl" });
     expect(result.format).toBe("jsonl");
     expect(result.signature.length).toBe(64);
   });
@@ -49,7 +49,7 @@ describe("audit router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.audit.list({ tenantId: 1, limit: 10 });
+    const result = await caller.audit.list({ limit: 10 });
     expect(result).toHaveProperty("events");
     expect(result).toHaveProperty("total");
     expect(Array.isArray(result.events)).toBe(true);
@@ -61,17 +61,16 @@ describe("subscription router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.subscription.list({ tenantId: 1 });
-    expect(Array.isArray(result)).toBe(true);
+    const result = await caller.subscription.list();
+    expect(Array.isArray(result.data)).toBe(true);
   });
 
   it("create procedure exists and accepts valid input", async () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Should accept valid input (may fail due to FK constraints but procedure exists)
     try {
-      await caller.subscription.create({ tenantId: 1, consumerAppId: 1, apiId: 1, planId: 1 });
+      await caller.subscription.create({ consumerAppId: 1, apiId: 1, planId: 1 });
     } catch (e: any) {
       // Expected to fail due to FK constraints in test env, but procedure should exist
       expect(e.message || e.code).toBeDefined();
@@ -84,7 +83,7 @@ describe("billing router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.billing.invoices({ tenantId: 1 });
+    const result = await caller.billing.invoices();
     expect(Array.isArray(result)).toBe(true);
   });
 
@@ -92,7 +91,7 @@ describe("billing router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.billing.usage({ tenantId: 1 });
+    const result = await caller.billing.usage({});
     expect(result).toBeDefined();
   });
 });
@@ -102,7 +101,7 @@ describe("analytics router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.analytics.dashboard({ tenantId: 1 });
+    const result = await caller.analytics.dashboard({});
     expect(result).toHaveProperty("totalApis");
     expect(result).toHaveProperty("totalConsumerApps");
     expect(result).toHaveProperty("totalSubscriptions");
@@ -116,7 +115,7 @@ describe("metering (analytics.metering)", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.analytics.metering({ tenantId: 1 });
+    const result = await caller.analytics.metering({});
     expect(result).toBeDefined();
   });
 });
@@ -126,7 +125,7 @@ describe("compliance router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.compliance.artifacts({ tenantId: 1 });
+    const result = await caller.compliance.artifacts({});
     expect(Array.isArray(result)).toBe(true);
   });
 
@@ -134,7 +133,7 @@ describe("compliance router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.compliance.byokKeys({ tenantId: 1 });
+    const result = await caller.compliance.byokKeys();
     expect(Array.isArray(result)).toBe(true);
   });
 });
@@ -144,7 +143,7 @@ describe("support router", () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.support.tickets({ tenantId: 1 });
+    const result = await caller.support.tickets();
     expect(Array.isArray(result)).toBe(true);
   });
 });

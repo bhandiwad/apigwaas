@@ -11,32 +11,27 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function RoleAssignmentsPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: roles, refetch: refetchRoles } = trpc.rbac.roles.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: roles, refetch: refetchRoles } = trpc.rbac.roles.useQuery(undefined);
+  const { data: assignments, refetch: refetchAssignments } = trpc.rbac.tenantAssignments.useQuery();
   const createRoleMutation = trpc.rbac.createRole.useMutation({ onSuccess: () => { refetchRoles(); toast.success("Role created"); } });
+  const removeAssignment = trpc.rbac.removeAssignment.useMutation({
+    onSuccess: () => { refetchAssignments(); toast.success("Role revoked"); },
+    onError: () => toast.error("Failed to revoke role"),
+  });
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [newRole, setNewRole] = useState({ name: "", scope: "workspace" as const, permissions: "" });
 
   const roleList = (roles as any[]) || [];
+  const assignmentList = (assignments as any[]) || [];
 
-  // Assignments derived from roles (in production, this would be a separate assignments table)
-  const assignments = [
-    { id: 1, userEmail: "admin@sify.com", userName: "Platform Admin", roleName: "Platform Admin", scope: "platform", assignedAt: "2024-01-15" },
-    { id: 2, userEmail: "ops@sify.com", userName: "SRE Team", roleName: "SRE Operator", scope: "platform", assignedAt: "2024-02-01" },
-    { id: 3, userEmail: "dev@acme.com", userName: "Acme Developer", roleName: "API Publisher", scope: "workspace:acme-prod", assignedAt: "2024-03-10" },
-    { id: 4, userEmail: "viewer@acme.com", userName: "Acme Viewer", roleName: "Read-Only Viewer", scope: "workspace:acme-prod", assignedAt: "2024-03-15" },
-    { id: 5, userEmail: "billing@partner.com", userName: "Partner Billing", roleName: "Billing Manager", scope: "tenant:partner-corp", assignedAt: "2024-04-01" },
-  ];
-
-  const filtered = assignments.filter(a =>
-    a.userEmail.toLowerCase().includes(search.toLowerCase()) ||
-    a.userName.toLowerCase().includes(search.toLowerCase()) ||
-    a.roleName.toLowerCase().includes(search.toLowerCase())
+  const filtered = assignmentList.filter((a: any) =>
+    (a.userEmail ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (a.userName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (a.roleName ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const scopeColors: Record<string, string> = { platform: "bg-purple-100 text-purple-700", workspace: "bg-blue-100 text-blue-700", tenant: "bg-amber-100 text-amber-700" };
+  const scopeColors: Record<string, string> = { platform: "bg-purple-100 text-purple-700", workspace: "bg-blue-100 text-blue-700", tenant: "bg-amber-100 text-amber-700", api: "bg-emerald-100 text-emerald-700", application: "bg-gray-100 text-gray-700" };
 
   return (
     <div className="space-y-6">
@@ -69,7 +64,6 @@ export default function RoleAssignmentsPage() {
               <Button className="w-full" onClick={() => {
                 if (!newRole.name) { toast.error("Role name required"); return; }
                 createRoleMutation.mutate({
-                  tenantId: defaultTenantId,
                   name: newRole.name,
                   scope: newRole.scope,
                   permissions: newRole.permissions.split(",").map(p => p.trim()).filter(Boolean),
@@ -110,33 +104,39 @@ export default function RoleAssignmentsPage() {
       </div>
 
       <Card className="border border-border/60">
-        <CardHeader className="pb-3"><CardTitle className="text-base">Active Assignments</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Active Assignments ({filtered.length})</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <div className="divide-y">
-            {filtered.map(assignment => (
-              <div key={assignment.id} className="px-4 py-3 flex items-center justify-between hover:bg-muted/20 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                    {assignment.userName.charAt(0)}
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No role assignments yet.</p>
+          ) : (
+            <div className="divide-y">
+              {filtered.map((assignment: any) => (
+                <div key={assignment.id} className="px-4 py-3 flex items-center justify-between hover:bg-muted/20 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                      {(assignment.userName ?? assignment.userEmail ?? "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{assignment.userName ?? "—"}</span>
+                        <span className="text-xs text-muted-foreground">{assignment.userEmail}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="secondary">{assignment.roleName ?? `Role #${assignment.roleId}`}</Badge>
+                        <Badge variant="secondary" className={scopeColors[assignment.roleScope ?? "workspace"] || ""}>{assignment.roleScope}</Badge>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{assignment.userName}</span>
-                      <span className="text-xs text-muted-foreground">{assignment.userEmail}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="secondary">{assignment.roleName}</Badge>
-                      <Badge variant="secondary" className={scopeColors[assignment.scope.split(":")[0]] || ""}>{assignment.scope}</Badge>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Since {new Date(assignment.createdAt).toLocaleDateString()}</span>
+                    <Button size="sm" variant="ghost" disabled={removeAssignment.isPending} onClick={() => removeAssignment.mutate({ id: assignment.id })}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Since {assignment.assignedAt}</span>
-                  <Button size="sm" variant="ghost" onClick={() => toast.info("Role revocation requires admin approval")}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

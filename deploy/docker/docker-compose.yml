@@ -41,17 +41,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=${DATABASE_URL:-mysql://cloudinfinit:cloudinfinit_secret@mysql:3306/cloudinfinit_apigw}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://cloudinfinit:cloudinfinit_secret@postgres:5432/cloudinfinit_apigw}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-minimum-32-chars}
       - GRAVITEE_API_URL=http://gravitee-management-api:8083
       - GRAVITEE_API_TOKEN=${GRAVITEE_API_TOKEN}
       - GRAVITEE_ORG_ID=${GRAVITEE_ORG_ID:-DEFAULT}
       - GRAVITEE_ENV_ID=${GRAVITEE_ENV_ID:-DEFAULT}
-      - VITE_APP_TITLE=${VITE_APP_TITLE:-CloudInfinit API Gateway}
     ports:
       - "3000:3000"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/trpc/system.health"]
@@ -63,34 +62,24 @@ services:
       - apigw-network
     restart: unless-stopped
 
-  # ─── MySQL (Platform Database) ──────────────────────────────────────────────
-  mysql:
-    image: mysql:8.0
-    container_name: apigw-mysql
+  # ─── PostgreSQL (Platform Database) ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: apigw-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
-      MYSQL_DATABASE: cloudinfinit_apigw
-      MYSQL_USER: cloudinfinit
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cloudinfinit_secret}
+      POSTGRES_DB: cloudinfinit_apigw
+      POSTGRES_USER: cloudinfinit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudinfinit_secret}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./init/mysql:/docker-entrypoint-initdb.d
-    command: >
-      --default-authentication-plugin=mysql_native_password
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --max-connections=500
-      --innodb-buffer-pool-size=256M
-      --slow-query-log=1
-      --long-query-time=2
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
+      test: ["CMD-SHELL", "pg_isready -U cloudinfinit -d cloudinfinit_apigw"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 20s
     networks:
       - apigw-network
     restart: unless-stopped
@@ -271,7 +260,7 @@ services:
 
 # ─── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
-  mysql-data:
+  postgres-data:
     driver: local
   mongodb-data:
     driver: local

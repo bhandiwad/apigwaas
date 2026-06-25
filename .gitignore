@@ -118,3 +118,4 @@ client/public/__manus__/version.json
 # Review notes (internal)
 ui-review-notes.txt
 gravitee-api-notes.txt
+.gstack/

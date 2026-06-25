@@ -7,20 +7,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Globe, Plus, Search, Upload, FileJson } from "lucide-react";
+import { Globe, Plus, Search, Upload, FileJson, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
 
 export default function ApisPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: workspaces } = trpc.workspace.list.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
-  const { data: apis, isLoading, refetch } = trpc.api.list.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
-  const createMutation = trpc.api.create.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("API created"); } });
+  const [, setLocation] = useLocation();
+  const searchStr = useSearch();
+  const qs = searchStr ? new URLSearchParams(searchStr) : null;
+  const qsWorkspaceId = qs ? Number(qs.get("workspaceId")) || undefined : undefined;
+  const qsWorkspaceName = qs?.get("workspaceName") ?? null;
+
+  const { data: workspaces } = trpc.workspace.list.useQuery(undefined);
+  const { data: apis, isLoading, refetch } = trpc.api.list.useQuery({ workspaceId: qsWorkspaceId });
+  const createMutation = trpc.api.create.useMutation({
+    onSuccess: () => { refetch(); setOpen(false); toast.success("API created"); },
+    onError: (e) => toast.error(e.message),
+  });
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ name: "", version: "1.0.0", protocol: "rest" as const, backendUrl: "", contextPath: "", description: "", workspaceId: "" });
+  const [form, setForm] = useState({ name: "", version: "1.0.0", protocol: "rest" as const, backendUrl: "", contextPath: "", description: "", workspaceId: qsWorkspaceId ? String(qsWorkspaceId) : "" });
   const [importSpec, setImportSpec] = useState("");
 
   const workspaceList = (workspaces as any[]) || [];
@@ -40,7 +48,6 @@ export default function ApisPage() {
       const wsId = workspaceList[0]?.id;
       if (!wsId) { toast.error("Create a workspace first"); return; }
       createMutation.mutate({
-        tenantId: defaultTenantId,
         workspaceId: wsId,
         name,
         version,
@@ -56,12 +63,30 @@ export default function ApisPage() {
     }
   };
 
+  const activeWorkspace = qsWorkspaceId
+    ? (workspaceList.find((w: any) => w.id === qsWorkspaceId) ?? (qsWorkspaceName ? { id: qsWorkspaceId, name: qsWorkspaceName } : null))
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">APIs</h1>
-          <p className="text-muted-foreground text-sm mt-1">Create, publish, and manage API endpoints</p>
+          {activeWorkspace ? (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <button onClick={() => setLocation("/workspaces")} className="text-xs text-muted-foreground hover:underline">Workspaces</button>
+                <span className="text-xs text-muted-foreground">/</span>
+                <span className="text-xs font-medium">{activeWorkspace.name}</span>
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight">{activeWorkspace.name}</h1>
+              <p className="text-muted-foreground text-sm mt-1">APIs in this workspace</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold tracking-tight">APIs</h1>
+              <p className="text-muted-foreground text-sm mt-1">Create, publish, and manage API endpoints</p>
+            </>
+          )}
         </div>
         <div className="flex gap-2">
           <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -125,8 +150,8 @@ export default function ApisPage() {
                 <div><Label>Context Path</Label><Input value={form.contextPath} onChange={e => setForm({...form, contextPath: e.target.value})} placeholder="/api/v1/payments" /></div>
                 <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={2} /></div>
                 <Button className="w-full" onClick={() => {
-                  const wsId = form.workspaceId ? parseInt(form.workspaceId) : workspaceList[0]?.id || 1;
-                  createMutation.mutate({ tenantId: defaultTenantId, workspaceId: wsId, name: form.name, version: form.version, protocol: form.protocol, backendUrl: form.backendUrl, contextPath: form.contextPath, description: form.description });
+                  const wsId = form.workspaceId ? parseInt(form.workspaceId) : workspaceList[0]?.id;
+                  createMutation.mutate({ workspaceId: wsId, name: form.name, version: form.version, protocol: form.protocol, backendUrl: form.backendUrl, contextPath: form.contextPath, description: form.description });
                 }} disabled={!form.name || createMutation.isPending}>
                   {createMutation.isPending ? "Creating..." : "Create API"}
                 </Button>
@@ -148,7 +173,7 @@ export default function ApisPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((api: any) => (
-            <Card key={api.id} className="border border-border/60 hover:shadow-sm transition-shadow">
+            <Card key={api.id} className="border border-border/60 hover:shadow-sm hover:border-primary/40 transition-all cursor-pointer" onClick={() => setLocation(`/apis/${api.id}`)}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Globe className="h-5 w-5 text-primary" /></div>
@@ -163,6 +188,7 @@ export default function ApisPage() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className={protocolColors[api.protocol] || ""}>{api.protocol.toUpperCase()}</Badge>
                   <Badge variant="secondary" className={statusColors[api.status] || ""}>{api.status}</Badge>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
                 </div>
               </CardContent>
             </Card>

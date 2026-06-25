@@ -21,9 +21,7 @@ export default function Alerts() {
   const [severity, setSeverity] = useState<"critical" | "warning" | "info">("warning");
   const [channels, setChannels] = useState("email");
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: alerts, refetch } = trpc.alert.rules.useQuery({ tenantId });
+  const { data: alerts, refetch } = trpc.alert.rules.useQuery();
   const createAlert = trpc.alert.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Alert rule created"); resetForm(); },
   });
@@ -50,7 +48,7 @@ export default function Alerts() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Alerts & Notifications (F-10)</h1>
+          <h1 className="text-2xl font-bold">Alerts & Notifications</h1>
           <p className="text-muted-foreground">Configure alert rules with threshold-based triggers and multi-channel notifications</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -106,7 +104,7 @@ export default function Alerts() {
                 <div><Label>Channels (comma-sep)</Label><Input value={channels} onChange={e => setChannels(e.target.value)} placeholder="email,slack,pagerduty" /></div>
               </div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || createAlert.isPending}
-                onClick={() => createAlert.mutate({ tenantId, name, type: metric as any, condition: { operator: condition, value: threshold, windowMinutes }, threshold, severity, channels: channels.split(",").map(c => ({ type: c.trim(), target: c.trim() })) })}>
+                onClick={() => createAlert.mutate({ name, type: metric as any, condition: { operator: condition, value: threshold, windowMinutes }, threshold, severity, channels: channels.split(",").map(c => ({ type: c.trim(), target: c.trim() })) })}>
                 {createAlert.isPending ? "Creating..." : "Create Alert Rule"}
               </Button>
             </div>

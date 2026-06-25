@@ -12,8 +12,7 @@ import { toast } from "sonner";
 
 export default function PaymentMethodsPage() {
   const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: invoices } = trpc.billing.invoices.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: invoices } = trpc.billing.invoices.useQuery(undefined);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ type: "card", cardNumber: "", expiry: "", cvv: "", name: "", upiId: "" });
 
@@ -121,7 +120,7 @@ export default function PaymentMethodsPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-lg font-bold text-amber-800">₹{totalDue.toLocaleString()}</span>
-              <Button size="sm" onClick={() => toast.success("Payment initiated for outstanding balance")}>Pay Now</Button>
+              <Button size="sm" variant="outline" disabled className="text-muted-foreground">Contact Billing</Button>
             </div>
           </CardContent>
         </Card>

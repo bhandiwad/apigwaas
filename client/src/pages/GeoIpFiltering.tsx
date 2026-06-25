@@ -19,9 +19,7 @@ export default function GeoIpFiltering() {
   const [xffHandling, setXffHandling] = useState<"trust_first" | "trust_last" | "ignore">("trust_first");
   const [maxmindDbPath, setMaxmindDbPath] = useState("/opt/gravitee/geoip/GeoLite2-Country.mmdb");
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: policies, refetch } = trpc.policy.list.useQuery({ tenantId });
+  const { data: policies, refetch } = trpc.policy.list.useQuery({});
   const geoIpPolicies = policies?.filter((p: any) => p.type === "geoip") || [];
   const createPolicy = trpc.policy.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("GeoIP policy created"); resetForm(); },
@@ -33,7 +31,7 @@ export default function GeoIpFiltering() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">GeoIP Filtering (F-08)</h1>
+          <h1 className="text-2xl font-bold">GeoIP Filtering</h1>
           <p className="text-muted-foreground">Allow/deny API access based on geographic location using MaxMind GeoIP database</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -70,7 +68,7 @@ export default function GeoIpFiltering() {
               </div>
               <div><Label>MaxMind Database Path</Label><Input value={maxmindDbPath} onChange={e => setMaxmindDbPath(e.target.value)} className="font-mono text-sm" /></div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || !countries || createPolicy.isPending}
-                onClick={() => createPolicy.mutate({ tenantId, name, type: "geoip", configuration: { mode, countries: countries.split(",").map(c => c.trim()), xffHandling, maxmindDbPath } })}>
+                onClick={() => createPolicy.mutate({ name, type: "geoip", configuration: { mode, countries: countries.split(",").map(c => c.trim()), xffHandling, maxmindDbPath } })}>
                 {createPolicy.isPending ? "Creating..." : "Create GeoIP Policy"}
               </Button>
             </div>

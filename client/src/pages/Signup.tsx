@@ -42,7 +42,7 @@ export default function SignupPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Self-Service Registration</h1>
-        <p className="text-muted-foreground text-sm mt-1">Register your organization for the CloudInfinit API Gateway platform</p>
+        <p className="text-muted-foreground text-sm mt-1">Register your organization for the sifycloudinfinit API Gateway platform</p>
       </div>
 
       {/* Progress Steps */}

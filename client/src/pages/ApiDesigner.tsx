@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, ArrowDown, Plus, Settings, Trash2, GripVertical, Shield, Zap, Eye, Lock, Globe, Code } from "lucide-react";
+import { ArrowRight, ArrowDown, Plus, Settings, Trash2, GripVertical, Shield, Zap, Eye, Lock, Globe, Code, Save } from "lucide-react";
 
 interface PolicyNode {
   id: string;
@@ -29,18 +33,65 @@ const AVAILABLE_POLICIES = [
   { type: "circuit-breaker", label: "Circuit Breaker", icon: Shield, color: "bg-rose-100 text-rose-700" },
 ];
 
+const DEFAULT_CONFIGS: Record<string, object> = {
+  "rate-limit": { limit: 100, period: "minute", burstLimit: 200 },
+  "jwt-validation": { issuer: "https://auth.example.com", audience: "api", algorithms: ["RS256"] },
+  "data-masking": { fields: ["$.body.pan", "$.body.aadhaar"], action: "partial", showLastN: 4 },
+  "ip-filtering": { whitelist: [], blacklist: [], failOnUnknown: false },
+  "geoip": { allowedCountries: ["IN"], blockedCountries: [], failOnUnknown: false },
+  "transform-headers": { addHeaders: {}, removeHeaders: [], renameHeaders: {} },
+  "cors": { allowedOrigins: ["*"], allowCredentials: false, maxAge: 86400 },
+  "cache": { ttl: 300, cacheControlHeader: true, varyOnHeaders: [] },
+  "oauth2": { resourceServerUrl: "", requiredScopes: [], tokenIntrospect: true },
+  "circuit-breaker": { failureThreshold: 50, slowCallThreshold: 2000, waitDuration: 30000 },
+};
+
+function policyIcon(type: string) {
+  return AVAILABLE_POLICIES.find(p => p.type === type)?.icon ?? Shield;
+}
+function policyColor(type: string) {
+  return AVAILABLE_POLICIES.find(p => p.type === type)?.color ?? "bg-gray-100 text-gray-700";
+}
+
 export default function ApiDesigner() {
-  const [requestPolicies, setRequestPolicies] = useState<PolicyNode[]>([
-    { id: "1", type: "jwt-validation", label: "JWT Validation", phase: "request", icon: Lock, color: "bg-blue-100 text-blue-700" },
-    { id: "2", type: "rate-limit", label: "Rate Limiting", phase: "request", icon: Zap, color: "bg-amber-100 text-amber-700" },
-    { id: "3", type: "ip-filtering", label: "IP Filtering", phase: "request", icon: Shield, color: "bg-red-100 text-red-700" },
-  ]);
-  const [responsePolicies, setResponsePolicies] = useState<PolicyNode[]>([
-    { id: "4", type: "data-masking", label: "Data Masking", phase: "response", icon: Eye, color: "bg-purple-100 text-purple-700" },
-    { id: "5", type: "transform-headers", label: "Transform Headers", phase: "response", icon: Code, color: "bg-cyan-100 text-cyan-700" },
-  ]);
+  const [selectedApiId, setSelectedApiId] = useState<string>("");
+  const [requestPolicies, setRequestPolicies] = useState<PolicyNode[]>([]);
+  const [responsePolicies, setResponsePolicies] = useState<PolicyNode[]>([]);
   const [addPhase, setAddPhase] = useState<"request" | "response">("request");
   const [addType, setAddType] = useState("");
+  const [configNode, setConfigNode] = useState<PolicyNode | null>(null);
+  const [configJson, setConfigJson] = useState("");
+
+  const { data: apis } = trpc.api.list.useQuery({ workspaceId: undefined });
+  const saveFlowsMutation = trpc.api.saveFlows.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.synced ? "Flows saved and synced to Gravitee" : "Flows saved to database (Gravitee offline)");
+    },
+    onError: () => toast.error("Failed to save flows"),
+  });
+
+  const selectedApi = (apis as any[])?.find((a: any) => String(a.id) === selectedApiId);
+
+  // Load saved flows from openApiSpec when API changes
+  useEffect(() => {
+    if (!selectedApi) {
+      setRequestPolicies([]);
+      setResponsePolicies([]);
+      return;
+    }
+    const saved = selectedApi.openApiSpec?.policyFlows ?? [];
+    const toNode = (f: any, idx: number): PolicyNode => ({
+      id: `${f.type}-${f.phase}-${idx}`,
+      type: f.type,
+      label: AVAILABLE_POLICIES.find(p => p.type === f.type)?.label ?? f.type,
+      phase: f.phase,
+      icon: policyIcon(f.type),
+      color: policyColor(f.type),
+      config: f.config,
+    });
+    setRequestPolicies(saved.filter((f: any) => f.phase === "request").map(toNode));
+    setResponsePolicies(saved.filter((f: any) => f.phase === "response").map(toNode));
+  }, [selectedApiId, selectedApi?.openApiSpec]);
 
   function addPolicy() {
     const policyDef = AVAILABLE_POLICIES.find(p => p.type === addType);
@@ -53,22 +104,46 @@ export default function ApiDesigner() {
       icon: policyDef.icon,
       color: policyDef.color,
     };
-    if (addPhase === "request") {
-      setRequestPolicies([...requestPolicies, newNode]);
-    } else {
-      setResponsePolicies([...responsePolicies, newNode]);
-    }
+    if (addPhase === "request") setRequestPolicies(prev => [...prev, newNode]);
+    else setResponsePolicies(prev => [...prev, newNode]);
     setAddType("");
     toast.success(`Added ${policyDef.label} to ${addPhase} phase`);
   }
 
-  function removePolicy(id: string, phase: "request" | "response") {
-    if (phase === "request") {
-      setRequestPolicies(requestPolicies.filter(p => p.id !== id));
-    } else {
-      setResponsePolicies(responsePolicies.filter(p => p.id !== id));
+  function openConfig(node: PolicyNode) {
+    setConfigNode(node);
+    setConfigJson(JSON.stringify(node.config ?? DEFAULT_CONFIGS[node.type] ?? {}, null, 2));
+  }
+
+  function saveConfig() {
+    if (!configNode) return;
+    try {
+      const parsed = JSON.parse(configJson);
+      const update = (prev: PolicyNode[]) => prev.map(p => p.id === configNode.id ? { ...p, config: parsed } : p);
+      if (configNode.phase === "request") setRequestPolicies(update);
+      else setResponsePolicies(update);
+      setConfigNode(null);
+      toast.success("Configuration updated");
+    } catch {
+      toast.error("Invalid JSON — check your configuration");
     }
   }
+
+  function removePolicy(id: string, phase: "request" | "response") {
+    if (phase === "request") setRequestPolicies(prev => prev.filter(p => p.id !== id));
+    else setResponsePolicies(prev => prev.filter(p => p.id !== id));
+  }
+
+  function saveFlows() {
+    if (!selectedApiId) { toast.error("Select an API first"); return; }
+    const flows = [
+      ...requestPolicies.map(p => ({ phase: "request" as const, type: p.type, config: (p.config ?? DEFAULT_CONFIGS[p.type] ?? {}) as Record<string, unknown> })),
+      ...responsePolicies.map(p => ({ phase: "response" as const, type: p.type, config: (p.config ?? DEFAULT_CONFIGS[p.type] ?? {}) as Record<string, unknown> })),
+    ];
+    saveFlowsMutation.mutate({ apiId: Number(selectedApiId), flows });
+  }
+
+  const apiList = (apis as any[]) ?? [];
 
   return (
     <div className="space-y-6">
@@ -77,10 +152,42 @@ export default function ApiDesigner() {
           <h1 className="text-2xl font-bold">API Designer</h1>
           <p className="text-muted-foreground">Visual policy flow editor — configure request and response processing chains</p>
         </div>
-        <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => toast.success("Policy chain saved")}>
-          Save Configuration
+        <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={saveFlows} disabled={!selectedApiId || saveFlowsMutation.isPending}>
+          <Save className="w-4 h-4 mr-2" />
+          {saveFlowsMutation.isPending ? "Saving..." : "Save Flows"}
         </Button>
       </div>
+
+      {/* API Selector */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Target API</Label>
+              <Select value={selectedApiId} onValueChange={setSelectedApiId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select API to configure flows..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {apiList.map((a: any) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.version && `(${a.version})`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedApi && (
+              <div className="text-sm text-muted-foreground pt-5">
+                <span className="font-mono text-xs">{selectedApi.contextPath}</span>
+                {selectedApi.openApiSpec?.policyFlows?.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700">
+                    {selectedApi.openApiSpec.policyFlows.length} saved flows
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Add Policy */}
       <Card>
@@ -121,12 +228,15 @@ export default function ApiDesigner() {
           </CardHeader>
           <CardContent className="pt-4">
             <div className="space-y-2">
-              {/* Client Entry */}
               <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-dashed">
                 <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center"><Globe className="w-4 h-4 text-gray-600" /></div>
                 <span className="text-sm font-medium text-gray-600">Client Request</span>
               </div>
               <div className="flex justify-center"><ArrowDown className="w-4 h-4 text-gray-300" /></div>
+
+              {requestPolicies.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-3">No request policies — add one above</p>
+              )}
 
               {requestPolicies.map((policy, idx) => (
                 <div key={policy.id}>
@@ -139,7 +249,7 @@ export default function ApiDesigner() {
                       <span className="text-sm font-medium">{policy.label}</span>
                       <div className="text-xs text-muted-foreground">Order: {idx + 1}</div>
                     </div>
-                    <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => toast.info("Configure policy — coming soon")}><Settings className="w-3 h-3" /></Button>
+                    <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => openConfig(policy)}><Settings className="w-3 h-3" /></Button>
                     <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 text-red-500" onClick={() => removePolicy(policy.id, "request")}><Trash2 className="w-3 h-3" /></Button>
                   </div>
                   {idx < requestPolicies.length - 1 && <div className="flex justify-center"><ArrowDown className="w-4 h-4 text-gray-300" /></div>}
@@ -170,14 +280,17 @@ export default function ApiDesigner() {
               </div>
               <div>
                 <p className="font-medium">Target Endpoint</p>
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded">https://api.backend.sify.com</code>
+                <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                  {selectedApi?.backendUrl ?? "No API selected"}
+                </code>
               </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Load Balancing: Round Robin</p>
-                <p>Health Check: /health (30s interval)</p>
-                <p>Timeout: 30s connect, 60s read</p>
-                <p>Retry: 3 attempts, exponential backoff</p>
-              </div>
+              {selectedApi && (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Protocol: {selectedApi.protocol?.toUpperCase()}</p>
+                  <p>Context: {selectedApi.contextPath}</p>
+                  <p>Version: {selectedApi.version}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -199,6 +312,10 @@ export default function ApiDesigner() {
               </div>
               <div className="flex justify-center"><ArrowDown className="w-4 h-4 text-gray-300" /></div>
 
+              {responsePolicies.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-3">No response policies — add one above</p>
+              )}
+
               {responsePolicies.map((policy, idx) => (
                 <div key={policy.id}>
                   <div className="flex items-center gap-2 p-3 border rounded-lg hover:shadow-sm transition-shadow group">
@@ -210,7 +327,7 @@ export default function ApiDesigner() {
                       <span className="text-sm font-medium">{policy.label}</span>
                       <div className="text-xs text-muted-foreground">Order: {idx + 1}</div>
                     </div>
-                    <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => toast.info("Configure policy — coming soon")}><Settings className="w-3 h-3" /></Button>
+                    <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => openConfig(policy)}><Settings className="w-3 h-3" /></Button>
                     <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 text-red-500" onClick={() => removePolicy(policy.id, "response")}><Trash2 className="w-3 h-3" /></Button>
                   </div>
                   {idx < responsePolicies.length - 1 && <div className="flex justify-center"><ArrowDown className="w-4 h-4 text-gray-300" /></div>}
@@ -227,9 +344,23 @@ export default function ApiDesigner() {
         </Card>
       </div>
 
+      {/* Policy Config Dialog */}
+      <Dialog open={!!configNode} onOpenChange={open => { if (!open) setConfigNode(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Configure: {configNode?.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <Label className="text-xs text-muted-foreground">JSON configuration — edit fields then save</Label>
+            <Textarea value={configJson} onChange={e => setConfigJson(e.target.value)} rows={12} className="font-mono text-xs" />
+            <Button className="w-full" onClick={saveConfig}>Apply Configuration</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Available Policies Reference */}
       <Card>
-        <CardHeader><CardTitle>Available Policies</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Available Policies</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {AVAILABLE_POLICIES.map(p => (

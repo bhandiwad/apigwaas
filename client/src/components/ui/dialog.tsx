@@ -89,6 +89,16 @@ function DialogOverlay({
 
 DialogOverlay.displayName = "DialogOverlay";
 
+// Recursively checks whether the dialog subtree already renders a DialogDescription
+// (it's commonly nested inside DialogHeader, so a shallow check isn't enough).
+function containsDescription(children: React.ReactNode): boolean {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    if (child.type === DialogDescription) return true;
+    return containsDescription((child.props as { children?: React.ReactNode })?.children);
+  });
+}
+
 function DialogContent({
   className,
   children,
@@ -99,6 +109,10 @@ function DialogContent({
   showCloseButton?: boolean;
 }) {
   const { isComposing } = useDialogComposition();
+
+  // Radix warns when no Description is associated. If a dialog intentionally has
+  // none, explicitly clear aria-describedby to acknowledge it and silence the warning.
+  const hasDescription = containsDescription(children);
 
   const handleEscapeKeyDown = React.useCallback(
     (e: KeyboardEvent) => {
@@ -129,6 +143,7 @@ function DialogContent({
         )}
         onEscapeKeyDown={handleEscapeKeyDown}
         {...props}
+        {...(hasDescription ? {} : { "aria-describedby": undefined })}
       >
         {children}
         {showCloseButton && (

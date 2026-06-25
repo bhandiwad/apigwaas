@@ -12,9 +12,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function SupportPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: tickets, isLoading, refetch } = trpc.support.tickets.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: tickets, isLoading, refetch } = trpc.support.tickets.useQuery(undefined);
   const createMutation = trpc.support.createTicket.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Ticket created"); } });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ subject: "", description: "", severity: "S3" as "S1" | "S2" | "S3" | "S4", category: "" });
@@ -59,7 +57,7 @@ export default function SupportPage() {
               </div>
               <div><Label>Category</Label><Input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="e.g. Billing, API, Performance" /></div>
               <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Detailed description, steps to reproduce..." rows={4} /></div>
-              <Button className="w-full" onClick={() => createMutation.mutate({ tenantId: defaultTenantId, ...form })} disabled={!form.subject || createMutation.isPending}>
+              <Button className="w-full" onClick={() => createMutation.mutate({ ...form })} disabled={!form.subject || createMutation.isPending}>
                 {createMutation.isPending ? "Submitting..." : "Submit Ticket"}
               </Button>
             </div>

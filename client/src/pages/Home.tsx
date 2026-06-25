@@ -1,17 +1,17 @@
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Globe, Layers, Zap, CreditCard, Activity, Shield, BarChart3, ArrowRight, Server, Users } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Globe, Zap, Activity, Users, BarChart3, CreditCard, Shield } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function Home() {
-  const { data: stats, isLoading } = trpc.analytics.dashboard.useQuery({ tenantId: undefined });
+  const { data: stats, isLoading } = trpc.analytics.dashboard.useQuery({});
   const [, setLocation] = useLocation();
 
   const kpiCards = [
-    { label: "Total APIs", value: stats?.totalApis ?? 0, sub: "Across all workspaces", icon: Globe, color: "text-amber-600" },
-    { label: "Consumer Apps", value: stats?.totalConsumerApps ?? 0, sub: "Registered applications", icon: Zap, color: "text-emerald-600" },
-    { label: "Subscriptions", value: stats?.totalSubscriptions ?? 0, sub: "Active subscriptions", icon: Activity, color: "text-blue-600" },
-    { label: "Tenants", value: stats?.totalTenants ?? 0, sub: "Organizations onboarded", icon: Users, color: "text-purple-600" },
+    { label: "Total APIs", value: stats?.totalApis ?? 0, sub: "Across all workspaces", icon: Globe, color: "text-amber-600", path: "/apis" },
+    { label: "Consumer Apps", value: stats?.totalConsumerApps ?? 0, sub: "Registered applications", icon: Zap, color: "text-emerald-600", path: "/consumer-apps" },
+    { label: "Subscriptions", value: stats?.totalSubscriptions ?? 0, sub: "Active subscriptions", icon: Activity, color: "text-blue-600", path: "/subscriptions" },
+    { label: "Tenants", value: stats?.totalTenants ?? 0, sub: "Organizations onboarded", icon: Users, color: "text-purple-600", path: "/tenants" },
   ];
 
   const navCards = [
@@ -23,16 +23,19 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Overview</h1>
-        <p className="text-muted-foreground mt-1">CloudInfinit API Gateway — Enterprise platform management dashboard</p>
+        <p className="text-muted-foreground mt-1">sifycloudinfinit API Gateway — Enterprise platform management dashboard</p>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards — clickable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((kpi) => (
-          <Card key={kpi.label} className="border border-border/60 shadow-sm hover:shadow-md transition-shadow">
+          <Card
+            key={kpi.label}
+            className="border border-border/60 shadow-sm hover:shadow-md hover:border-primary/40 transition-all cursor-pointer"
+            onClick={() => setLocation(kpi.path)}
+          >
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -48,29 +51,6 @@ export default function Home() {
           </Card>
         ))}
       </div>
-
-      {/* Platform Info */}
-      <Card className="border border-border/60 shadow-sm">
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold text-foreground">Multi-Tenant API Gateway Platform</h2>
-          <p className="text-sm text-muted-foreground mt-2 max-w-3xl">
-            Manage the complete lifecycle of APIs across multiple tenants and workspaces. Track cost efficiency, resource utilization, and ensure compliance with Indian regulatory requirements including GST, DPDP, and RBI CSCRF.
-          </p>
-          <div className="flex items-center gap-6 mt-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Platform Status:</span>
-              <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Operational
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Tiers:</span>
-              <span className="font-medium text-foreground">Starter · Business · Enterprise · Sovereign</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Navigation Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -91,7 +71,6 @@ export default function Home() {
                     <p className="text-xs text-muted-foreground mt-0.5">{card.desc}</p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors mt-1" />
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {card.bullets.map((b) => (

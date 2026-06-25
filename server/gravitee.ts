@@ -16,6 +16,8 @@ import { ENV } from "./_core/env";
 interface GraviteeConfig {
   baseUrl: string;
   token: string;
+  user: string;
+  password: string;
   organizationId: string;
   environmentId: string;
   timeout: number;
@@ -25,14 +27,49 @@ interface GraviteeConfig {
 
 function getConfig(): GraviteeConfig {
   return {
-    baseUrl: ENV.graviteeApiUrl || "http://localhost:8083",
+    baseUrl: ENV.graviteeApiUrl || "",
     token: ENV.graviteeApiToken || "",
+    user: ENV.graviteeApiUser || "",
+    password: ENV.graviteeApiPassword || "",
     organizationId: ENV.graviteeOrgId || "DEFAULT",
     environmentId: ENV.graviteeEnvId || "DEFAULT",
     timeout: parseInt(process.env.GRAVITEE_TIMEOUT || "30000"),
     retryAttempts: parseInt(process.env.GRAVITEE_RETRY_ATTEMPTS || "3"),
     retryDelay: parseInt(process.env.GRAVITEE_RETRY_DELAY || "1000"),
   };
+}
+
+// ─── JWT Token Cache (username/password auth) ────────────────────────────────
+
+let _jwtCache: { token: string; expiresAt: number } | null = null;
+
+async function resolveAuthToken(): Promise<string> {
+  const config = getConfig();
+
+  // PAT takes priority — used directly as Bearer
+  if (config.token) return config.token;
+
+  // Username/password → JWT login
+  if (config.user && config.password) {
+    if (_jwtCache && _jwtCache.expiresAt > Date.now() + 60_000) {
+      return _jwtCache.token;
+    }
+    const creds = Buffer.from(`${config.user}:${config.password}`).toString("base64");
+    const resp = await axios.post(
+      `${config.baseUrl}/management/organizations/${config.organizationId}/user/login`,
+      {},
+      {
+        headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
+        timeout: 10_000,
+      }
+    );
+    const token: string = resp.data?.token || resp.data?.access_token;
+    if (!token) throw new Error("Gravitee login failed: unexpected response format");
+    _jwtCache = { token, expiresAt: Date.now() + 50 * 60_000 }; // cache 50 min
+    return token;
+  }
+
+  throw new Error("Gravitee not configured: set GRAVITEE_API_TOKEN or GRAVITEE_API_USER + GRAVITEE_API_PASSWORD");
 }
 
 // ─── HTTP Client with Retry ──────────────────────────────────────────────────
@@ -42,27 +79,32 @@ let _client: AxiosInstance | null = null;
 function getClient(): AxiosInstance {
   if (_client) return _client;
   const config = getConfig();
-  
+
   _client = axios.create({
     baseURL: config.baseUrl,
     timeout: config.timeout,
     headers: {
-      "Authorization": `Bearer ${config.token}`,
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
   });
 
-  // Response interceptor for error handling
+  // Inject auth token per-request (supports JWT refresh)
+  _client.interceptors.request.use(async (requestConfig) => {
+    const token = await resolveAuthToken();
+    requestConfig.headers["Authorization"] = `Bearer ${token}`;
+    return requestConfig;
+  });
+
+  // Response interceptor for retry on 5xx
   _client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
       const originalRequest = error.config as AxiosRequestConfig & { _retryCount?: number };
       if (!originalRequest) return Promise.reject(error);
-      
+
       originalRequest._retryCount = originalRequest._retryCount || 0;
 
-      // Retry on 5xx or network errors
       const shouldRetry = (
         originalRequest._retryCount < config.retryAttempts &&
         (!error.response || error.response.status >= 500)
@@ -82,9 +124,10 @@ function getClient(): AxiosInstance {
   return _client;
 }
 
-// Reset client (useful when config changes)
+// Reset client and cached token (call when config changes)
 export function resetGraviteeClient(): void {
   _client = null;
+  _jwtCache = null;
 }
 
 // ─── Health Check ────────────────────────────────────────────────────────────
@@ -98,9 +141,8 @@ export interface GraviteeHealthStatus {
 }
 
 export async function checkGraviteeHealth(): Promise<GraviteeHealthStatus> {
-  const config = getConfig();
-  if (!config.token || !config.baseUrl) {
-    return { connected: false, error: "GRAVITEE_API_URL or GRAVITEE_API_TOKEN not configured" };
+  if (!isGraviteeConfigured()) {
+    return { connected: false, error: "Gravitee not configured (set GRAVITEE_API_URL + credentials)" };
   }
 
   const start = Date.now();
@@ -124,14 +166,16 @@ export async function checkGraviteeHealth(): Promise<GraviteeHealthStatus> {
 
 // ─── Path Helpers ────────────────────────────────────────────────────────────
 
-function v1Path(path: string): string {
+function v1Path(path: string, envId?: string): string {
   const config = getConfig();
-  return `/management/organizations/${config.organizationId}/environments/${config.environmentId}${path}`;
+  const env = envId || config.environmentId;
+  return `/management/organizations/${config.organizationId}/environments/${env}${path}`;
 }
 
-function v2Path(path: string): string {
+function v2Path(path: string, envId?: string): string {
   const config = getConfig();
-  return `/management/v2/environments/${config.environmentId}${path}`;
+  const env = envId || config.environmentId;
+  return `/management/v2/environments/${env}${path}`;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -251,9 +295,9 @@ export async function listApis(params?: { page?: number; perPage?: number; query
   return response.data;
 }
 
-export async function getApi(apiId: string): Promise<GraviteeApi> {
+export async function getApi(apiId: string, envId?: string): Promise<GraviteeApi> {
   const client = getClient();
-  const response = await client.get(v2Path(`/apis/${apiId}`));
+  const response = await client.get(v2Path(`/apis/${apiId}`, envId));
   return response.data;
 }
 
@@ -289,26 +333,26 @@ export async function importApiDefinition(definition: any): Promise<GraviteeApi>
 
 // ─── API Lifecycle ───────────────────────────────────────────────────────────
 
-export async function startApi(apiId: string): Promise<void> {
+export async function startApi(apiId: string, envId?: string): Promise<void> {
   const client = getClient();
-  await client.post(v2Path(`/apis/${apiId}/_start`));
+  await client.post(v2Path(`/apis/${apiId}/_start`, envId));
 }
 
-export async function stopApi(apiId: string): Promise<void> {
+export async function stopApi(apiId: string, envId?: string): Promise<void> {
   const client = getClient();
-  await client.post(v2Path(`/apis/${apiId}/_stop`));
+  await client.post(v2Path(`/apis/${apiId}/_stop`, envId));
 }
 
-export async function deployApi(apiId: string, label?: string): Promise<GraviteeDeployment> {
+export async function deployApi(apiId: string, label?: string, envId?: string): Promise<GraviteeDeployment> {
   const client = getClient();
-  const response = await client.post(v2Path(`/apis/${apiId}/deployments`), { deploymentLabel: label });
+  const response = await client.post(v2Path(`/apis/${apiId}/deployments`, envId), { deploymentLabel: label });
   return response.data;
 }
 
-export async function getApiDeploymentState(apiId: string): Promise<{ apiId: string; deployedAt?: string; isDeployed: boolean }> {
+export async function getApiDeploymentState(apiId: string, envId?: string): Promise<{ apiId: string; deployedAt?: string; isDeployed: boolean }> {
   const client = getClient();
   try {
-    const api = await getApi(apiId);
+    const api = await getApi(apiId, envId);
     return {
       apiId,
       deployedAt: api.deployedAt,
@@ -374,6 +418,23 @@ export async function processSubscription(apiId: string, subscriptionId: string,
 export async function closeSubscription(apiId: string, subscriptionId: string): Promise<void> {
   const client = getClient();
   await client.post(v2Path(`/apis/${apiId}/subscriptions/${subscriptionId}/_close`));
+}
+
+export async function getSubscriptionApiKeys(apiId: string, subscriptionId: string): Promise<Array<{ key: string; id: string; createdAt?: string; revokedAt?: string }>> {
+  const client = getClient();
+  const response = await client.get(v2Path(`/apis/${apiId}/subscriptions/${subscriptionId}/api-keys`));
+  return response.data?.data ?? response.data ?? [];
+}
+
+export async function renewSubscriptionApiKey(apiId: string, subscriptionId: string): Promise<{ key: string; id: string }> {
+  const client = getClient();
+  const response = await client.post(v2Path(`/apis/${apiId}/subscriptions/${subscriptionId}/api-keys/_renew`));
+  return response.data;
+}
+
+export async function revokeSubscriptionApiKey(apiId: string, subscriptionId: string, keyId: string): Promise<void> {
+  const client = getClient();
+  await client.delete(v2Path(`/apis/${apiId}/subscriptions/${subscriptionId}/api-keys/${keyId}`));
 }
 
 // ─── Applications ────────────────────────────────────────────────────────────
@@ -485,12 +546,8 @@ export async function getPortalApi(apiId: string): Promise<any> {
 
 export function isGraviteeConfigured(): boolean {
   const config = getConfig();
-  return !!(
-    config.baseUrl && 
-    config.token && 
-    config.token !== "not-configured" &&
-    config.baseUrl !== "http://localhost:8083"
-  );
+  const hasAuth = !!(config.token || (config.user && config.password));
+  return !!(config.baseUrl && hasAuth);
 }
 
 // ─── Batch operations ────────────────────────────────────────────────────────
@@ -517,4 +574,10 @@ export async function syncAllInstances(): Promise<GraviteeInstance[]> {
   } catch {
     return [];
   }
+}
+
+export async function getApiLogs(apiId: string, params?: { page?: number; size?: number }): Promise<{ data: any[]; pagination: any }> {
+  const client = getClient();
+  const response = await client.get(v2Path(`/apis/${apiId}/logs`), { params: { page: params?.page ?? 1, size: params?.size ?? 50 } });
+  return response.data;
 }

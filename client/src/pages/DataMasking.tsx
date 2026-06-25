@@ -31,9 +31,7 @@ export default function DataMasking() {
   const [showLastN, setShowLastN] = useState(4);
   const [priority, setPriority] = useState(0);
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: rules, refetch } = trpc.masking.rules.useQuery({ tenantId });
+  const { data: rules, refetch } = trpc.masking.rules.useQuery({});
   const createRule = trpc.masking.createRule.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Masking rule created"); resetForm(); },
   });
@@ -45,7 +43,7 @@ export default function DataMasking() {
   function resetForm() { setName(""); setJsonPath(""); setAction("partial"); setCategory("custom"); setPhase("both"); setReplacement(""); setShowLastN(4); }
 
   function applyPrebuilt(rule: typeof PREBUILT_RULES[0]) {
-    createRule.mutate({ tenantId, name: rule.name, jsonPath: rule.jsonPath, action: rule.action, category: rule.category, phase: "response", showLastN: rule.showLastN, priority: 0 });
+    createRule.mutate({ name: rule.name, jsonPath: rule.jsonPath, action: rule.action, category: rule.category, phase: "response", showLastN: rule.showLastN, priority: 0 });
   }
 
   const actionLabel = (a: string) => {
@@ -74,7 +72,7 @@ export default function DataMasking() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Data Masking (F-01)</h1>
+          <h1 className="text-2xl font-bold">Data Masking</h1>
           <p className="text-muted-foreground">Configure JSONPath-based data masking rules for API responses</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -130,7 +128,7 @@ export default function DataMasking() {
               {action === "full_replace" && <div><Label>Replacement Value</Label><Input value={replacement} onChange={e => setReplacement(e.target.value)} placeholder="[REDACTED]" /></div>}
               <div><Label>Priority (lower = first)</Label><Input type="number" value={priority} onChange={e => setPriority(Number(e.target.value))} /></div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || !jsonPath || createRule.isPending}
-                onClick={() => createRule.mutate({ tenantId, name, jsonPath, action, category, phase, replacement: replacement || undefined, showLastN, priority })}>
+                onClick={() => createRule.mutate({ name, jsonPath, action, category, phase, replacement: replacement || undefined, showLastN, priority })}>
                 {createRule.isPending ? "Creating..." : "Create Rule"}
               </Button>
             </div>

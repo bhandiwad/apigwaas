@@ -21,9 +21,7 @@ export default function IdentityProviders() {
   const [jitProvisioning, setJitProvisioning] = useState(true);
   const [scimEnabled, setScimEnabled] = useState(false);
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: providers, refetch } = trpc.idp.list.useQuery({ tenantId });
+  const { data: providers, refetch } = trpc.idp.list.useQuery();
   const createIdp = trpc.idp.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Identity provider created"); resetForm(); },
   });
@@ -52,7 +50,7 @@ export default function IdentityProviders() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Identity Providers (F-04)</h1>
+          <h1 className="text-2xl font-bold">Identity Providers</h1>
           <p className="text-muted-foreground">Configure OIDC, SAML, and LDAP identity providers with JIT provisioning and SCIM</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -95,7 +93,7 @@ export default function IdentityProviders() {
                 <Switch checked={scimEnabled} onCheckedChange={setScimEnabled} />
               </div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || createIdp.isPending}
-                onClick={() => createIdp.mutate({ tenantId, name, type, issuerUrl: issuerUrl || undefined, clientId: clientId || undefined, discoveryUrl: discoveryUrl || undefined, jitProvisioning, scimEnabled })}>
+                onClick={() => createIdp.mutate({ name, type, issuerUrl: issuerUrl || undefined, clientId: clientId || undefined, discoveryUrl: discoveryUrl || undefined, jitProvisioning, scimEnabled })}>
                 {createIdp.isPending ? "Creating..." : "Add Provider"}
               </Button>
             </div>

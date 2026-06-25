@@ -10,9 +10,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function RbacPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: roles, isLoading, refetch } = trpc.rbac.roles.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: roles, isLoading, refetch } = trpc.rbac.roles.useQuery(undefined);
   const createMutation = trpc.rbac.createRole.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Role created"); } });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "" });
@@ -42,7 +40,7 @@ export default function RbacPage() {
             <div className="space-y-4 mt-4">
               <div><Label>Role Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="API Publisher" /></div>
               <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Can publish and manage APIs" /></div>
-              <Button className="w-full" onClick={() => createMutation.mutate({ tenantId: defaultTenantId, ...form, scope: "workspace", permissions: [] })} disabled={!form.name || createMutation.isPending}>
+              <Button className="w-full" onClick={() => createMutation.mutate({ ...form, scope: "workspace", permissions: [] })} disabled={!form.name || createMutation.isPending}>
                 {createMutation.isPending ? "Creating..." : "Create Role"}
               </Button>
             </div>

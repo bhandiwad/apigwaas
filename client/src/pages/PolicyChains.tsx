@@ -31,6 +31,9 @@ export default function PolicyChains() {
   const [order, setOrder] = useState(0);
   const [condition, setCondition] = useState("");
 
+  const { data: apis } = trpc.api.list.useQuery({});
+  const apiList = (apis as any[]) ?? [];
+
   const { data: chains, refetch } = trpc.policyChain.list.useQuery({ apiId: apiId ? Number(apiId) : 0 }, { enabled: !!apiId });
   const addPolicy = trpc.policyChain.add.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Policy added to chain"); },
@@ -75,7 +78,16 @@ export default function PolicyChains() {
           <DialogContent>
             <DialogHeader><DialogTitle>Add Policy to Chain</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-4">
-              <div><Label>API ID</Label><Input type="number" value={apiId} onChange={e => setApiId(e.target.value)} placeholder="Target API" /></div>
+              <div><Label>API</Label>
+                <Select value={apiId} onValueChange={setApiId}>
+                  <SelectTrigger><SelectValue placeholder="Select API..." /></SelectTrigger>
+                  <SelectContent>
+                    {apiList.map((a: any) => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.version && `(${a.version})`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div><Label>Phase</Label>
                 <Select value={phase} onValueChange={v => setPhase(v as any)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -99,7 +111,7 @@ export default function PolicyChains() {
               <div><Label>Order (0 = first)</Label><Input type="number" value={order} onChange={e => setOrder(Number(e.target.value))} /></div>
               <div><Label>Condition (optional SpEL)</Label><Input value={condition} onChange={e => setCondition(e.target.value)} placeholder="#request.headers['x-env'] == 'prod'" className="font-mono text-xs" /></div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!apiId || addPolicy.isPending}
-                onClick={() => addPolicy.mutate({ apiId: Number(apiId), tenantId: 1, phase, policyId: POLICY_TYPES.findIndex(p => p.value === policyType) + 1, order, condition: condition || undefined, configuration: {} })}>
+                onClick={() => addPolicy.mutate({ apiId: Number(apiId), phase, policyId: POLICY_TYPES.findIndex(p => p.value === policyType) + 1, order, condition: condition || undefined, configuration: {} })}>
                 {addPolicy.isPending ? "Adding..." : "Add to Chain"}
               </Button>
             </div>
@@ -112,7 +124,16 @@ export default function PolicyChains() {
         <CardContent className="pt-4">
           <div className="flex items-center gap-4">
             <Label className="whitespace-nowrap">Select API:</Label>
-            <Input type="number" value={apiId} onChange={e => setApiId(e.target.value)} placeholder="Enter API ID to view its policy chain" className="max-w-xs" />
+            <Select value={apiId} onValueChange={setApiId}>
+              <SelectTrigger className="max-w-sm">
+                <SelectValue placeholder="Choose an API to view its policy chain..." />
+              </SelectTrigger>
+              <SelectContent>
+                {apiList.map((a: any) => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.version && `(${a.version})`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

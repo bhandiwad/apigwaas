@@ -18,9 +18,7 @@ export default function EventEntrypoints() {
   const [authMethod, setAuthMethod] = useState<"none" | "sasl_plain" | "sasl_scram" | "mtls" | "api_key">("none");
   const [apiId, setApiId] = useState("");
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: entrypoints, refetch } = trpc.event.entrypoints.useQuery({ tenantId });
+  const { data: entrypoints, refetch } = trpc.event.entrypoints.useQuery({});
   const createEntrypoint = trpc.event.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Event entrypoint created"); resetForm(); },
   });
@@ -50,7 +48,7 @@ export default function EventEntrypoints() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Event-Native Entrypoints (F-13)</h1>
+          <h1 className="text-2xl font-bold">Event-Native Entrypoints</h1>
           <p className="text-muted-foreground">Configure Kafka, MQTT, RabbitMQ, and Webhook event sources for APIs</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -87,7 +85,7 @@ export default function EventEntrypoints() {
                 </Select>
               </div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!apiId || createEntrypoint.isPending}
-                onClick={() => createEntrypoint.mutate({ apiId: Number(apiId), tenantId, type, topicPattern: topicPattern || undefined, brokerUrl: brokerUrl || undefined, authMethod })}>
+                onClick={() => createEntrypoint.mutate({ apiId: Number(apiId),  type, topicPattern: topicPattern || undefined, brokerUrl: brokerUrl || undefined, authMethod })}>
                 {createEntrypoint.isPending ? "Creating..." : "Create Entrypoint"}
               </Button>
             </div>

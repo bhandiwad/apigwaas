@@ -6,9 +6,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2, PlayCircle, PauseCircle, XCircle, Download, ArrowRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
+function downloadBlob(content: string, filename: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function TenantLifecyclePage() {
   const { data: tenants, refetch } = trpc.tenant.list.useQuery();
   const updateMutation = trpc.tenant.update.useMutation({ onSuccess: () => { refetch(); toast.success("Tenant status updated"); } });
+  const exportMutation = trpc.audit.export.useMutation({
+    onSuccess: (data) => {
+      const ext = data.format === "csv" ? "csv" : "jsonl";
+      const mime = data.format === "csv" ? "text/csv" : "application/x-ndjson";
+      downloadBlob(data.content, `audit-export-${Date.now()}.${ext}`, mime);
+      toast.success(`Exported ${data.recordCount} records`);
+    },
+  });
 
   const tenantList = (tenants as any[]) || [];
   const statusColors: Record<string, string> = { active: "bg-emerald-100 text-emerald-700", provisioning: "bg-blue-100 text-blue-700", suspended: "bg-amber-100 text-amber-700", offboarding: "bg-red-100 text-red-700", terminated: "bg-gray-200 text-gray-500" };
@@ -94,7 +111,7 @@ export default function TenantLifecyclePage() {
                         </>
                       )}
                       {t.status === "offboarding" && (
-                        <Button size="sm" variant="outline" onClick={() => toast.info("Data export bundle download coming soon")} title="Download Data">
+                        <Button size="sm" variant="outline" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate({ format: "jsonl" })} title="Download Data">
                           <Download className="h-4 w-4 text-blue-600" />
                         </Button>
                       )}
@@ -163,8 +180,8 @@ export default function TenantLifecyclePage() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold">{t.name}</h3>
-                    <Button size="sm" variant="outline" onClick={() => toast.info("Data export bundle download coming soon")}>
-                      <Download className="h-4 w-4 mr-1" />Export Data Bundle
+                    <Button size="sm" variant="outline" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate({ format: "jsonl" })}>
+                      <Download className="h-4 w-4 mr-1" />{exportMutation.isPending ? "Exporting..." : "Export Data Bundle"}
                     </Button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">

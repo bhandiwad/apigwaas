@@ -14,6 +14,7 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: any[] } {
     name: "Test Admin",
     loginMethod: "manus",
     role: "admin",
+    tenantId: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -110,7 +111,6 @@ describe("policy router validation", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(
       caller.policy.create({
-        tenantId: 1,
         name: "",
         type: "rate_limit",
         phase: "both",
@@ -124,7 +124,6 @@ describe("policy router validation", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(
       caller.policy.create({
-        tenantId: 1,
         name: "Test Policy",
         type: "invalid_type" as any,
         phase: "both",
@@ -140,7 +139,6 @@ describe("rbac router validation", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(
       caller.rbac.createRole({
-        tenantId: 1,
         name: "",
         scope: "workspace",
         permissions: [],
@@ -153,7 +151,6 @@ describe("rbac router validation", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(
       caller.rbac.createRole({
-        tenantId: 1,
         name: "Test Role",
         scope: "invalid_scope" as any,
         permissions: [],

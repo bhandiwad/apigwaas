@@ -1,0 +1,168 @@
+# ============================================================================
+# Gravitee APIM — Local Development Stack
+# Runs: MongoDB + Elasticsearch + Redis + Gravitee Management API + Gateway
+# Does NOT include the CloudInfinit platform (run that separately with pnpm dev)
+#
+# Usage:
+#   docker compose -f deploy/docker/docker-compose.gravitee.yml up -d
+#   docker compose -f deploy/docker/docker-compose.gravitee.yml logs -f gravitee-mgmt-api
+#
+# Ports:
+#   8083  — Gravitee Management REST API  (used by the platform)
+#   8082  — Gravitee Gateway              (API traffic flows here)
+#   8084  — Gravitee Console UI           (admin UI at http://localhost:8084)
+#
+# Default credentials: admin / admin
+# ============================================================================
+
+version: "3.9"
+
+services:
+  # ─── MongoDB (Gravitee config store) ────────────────────────────────────────
+  gravitee-mongo:
+    image: mongo:7.0
+    container_name: dev-gravitee-mongo
+    environment:
+      MONGO_INITDB_DATABASE: gravitee
+    ports:
+      - "27017:27017"
+    volumes:
+      - dev-gravitee-mongo:/data/db
+    command: ["--wiredTigerCacheSizeGB", "0.5"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ─── Elasticsearch (analytics) ──────────────────────────────────────────────
+  gravitee-elastic:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.4
+    container_name: dev-gravitee-elastic
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - cluster.name=gravitee-dev
+    ports:
+      - "9200:9200"
+    volumes:
+      - dev-gravitee-es:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # ─── Redis (rate limiting) ───────────────────────────────────────────────────
+  gravitee-redis:
+    image: redis:7.2-alpine
+    container_name: dev-gravitee-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Gravitee Management API ────────────────────────────────────────────────
+  gravitee-mgmt-api:
+    image: graviteeio/apim-management-api:4.4
+    container_name: dev-gravitee-mgmt-api
+    ports:
+      - "8083:8083"
+      - "18083:18083"
+    environment:
+      - gravitee_management_mongodb_uri=mongodb://gravitee-mongo:27017/gravitee
+      - gravitee_analytics_elasticsearch_endpoints_0=http://gravitee-elastic:9200
+      - gravitee_ratelimit_redis_host=gravitee-redis
+      - gravitee_ratelimit_redis_port=6379
+      - gravitee_reporters_elasticsearch_endpoints_0=http://gravitee-elastic:9200
+      - gravitee_services_core_http_enabled=true
+      - gravitee_services_core_http_port=18083
+      - gravitee_services_core_http_host=0.0.0.0
+      - gravitee_services_core_http_authentication_type=basic
+      - gravitee_services_core_http_authentication_users_admin=admin
+      - gravitee_api_rest_cors_allow-origin=*
+      - gravitee_email_enabled=false
+      # Keep JWTs valid for 8 hours in dev
+      - gravitee_jwt_expire-after=28800
+    depends_on:
+      gravitee-mongo:
+        condition: service_healthy
+      gravitee-elastic:
+        condition: service_healthy
+      gravitee-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u admin:admin http://localhost:18083/_node/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    volumes:
+      - dev-gravitee-mgmt-plugins:/opt/graviteeio-management-api/plugins-ext
+    restart: unless-stopped
+
+  # ─── Gravitee Gateway ───────────────────────────────────────────────────────
+  gravitee-gateway:
+    image: graviteeio/apim-gateway:4.4
+    container_name: dev-gravitee-gateway
+    ports:
+      - "8082:8082"
+      - "18082:18082"
+    environment:
+      - gravitee_management_mongodb_uri=mongodb://gravitee-mongo:27017/gravitee
+      - gravitee_ratelimit_mongodb_uri=mongodb://gravitee-mongo:27017/gravitee
+      - gravitee_ratelimit_redis_host=gravitee-redis
+      - gravitee_ratelimit_redis_port=6379
+      - gravitee_reporters_elasticsearch_endpoints_0=http://gravitee-elastic:9200
+      - gravitee_services_core_http_enabled=true
+      - gravitee_services_core_http_port=18082
+      - gravitee_services_core_http_host=0.0.0.0
+      - gravitee_services_core_http_authentication_type=basic
+      - gravitee_services_core_http_authentication_users_admin=admin
+    depends_on:
+      gravitee-mongo:
+        condition: service_healthy
+      gravitee-elastic:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u admin:admin http://localhost:18082/_node/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - dev-gravitee-gw-plugins:/opt/graviteeio-gateway/plugins-ext
+    restart: unless-stopped
+
+  # ─── Gravitee Console UI (admin) ─────────────────────────────────────────────
+  gravitee-console:
+    image: graviteeio/apim-management-ui:4.4
+    container_name: dev-gravitee-console
+    ports:
+      - "8084:8080"
+    environment:
+      - MGMT_API_URL=http://localhost:8083/management/
+    depends_on:
+      gravitee-mgmt-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  dev-gravitee-mongo:
+  dev-gravitee-es:
+  dev-gravitee-mgmt-plugins:
+  dev-gravitee-gw-plugins:

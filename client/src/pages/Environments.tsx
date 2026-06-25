@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { GitBranch, Plus, ArrowRight, Layers, Workflow } from "lucide-react";
 
@@ -19,20 +20,52 @@ export default function Environments() {
   const [argoAppName, setArgoAppName] = useState("");
   const [autoPromote, setAutoPromote] = useState(false);
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: environments, refetch } = trpc.env.list.useQuery({ tenantId });
+  const [promoteEnv, setPromoteEnv] = useState<any | null>(null);
+  const [promoteNextEnv, setPromoteNextEnv] = useState<any | null>(null);
+  const [selectedApiIds, setSelectedApiIds] = useState<number[]>([]);
+
+  const { data: environments, refetch } = trpc.env.list.useQuery();
+  const { data: apis } = trpc.api.list.useQuery({});
   const createEnv = trpc.env.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Environment created"); resetForm(); },
   });
+  const deployMutation = trpc.gateway.deploy.useMutation();
+
+  const apiList = (apis as any[]) || [];
 
   function resetForm() { setName(""); setSlug(""); setGitBranch(""); setGitFolder(""); setArgoAppName(""); setAutoPromote(false); }
+
+  function openPromote(env: any) {
+    const envList = (environments as any[]) || [];
+    const idx = envList.findIndex((e: any) => e.id === env.id);
+    const next = envList[idx + 1];
+    if (!next) { toast.info("This is the last environment — no promotion target"); return; }
+    setPromoteEnv(env);
+    setPromoteNextEnv(next);
+    setSelectedApiIds(apiList.map((a: any) => a.id));
+  }
+
+  async function runPromotion() {
+    if (!promoteNextEnv?.clusterId) { toast.error("Target environment has no cluster assigned"); return; }
+    let count = 0;
+    for (const apiId of selectedApiIds) {
+      const api = apiList.find((a: any) => a.id === apiId);
+      try {
+        await deployMutation.mutateAsync({ apiId, clusterIds: [promoteNextEnv.clusterId], version: api?.version || "1.0.0" });
+        count++;
+      } catch {
+        toast.error(`Failed to deploy API #${apiId}`);
+      }
+    }
+    toast.success(`Promoted ${count} API${count !== 1 ? "s" : ""} to ${promoteNextEnv.name}`);
+    setPromoteEnv(null);
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Environments & APIOps (F-12)</h1>
+          <h1 className="text-2xl font-bold">Environments & APIOps</h1>
           <p className="text-muted-foreground">GitOps promotion pipeline with ArgoCD integration</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -52,7 +85,7 @@ export default function Environments() {
                 <Switch checked={autoPromote} onCheckedChange={setAutoPromote} />
               </div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || !slug || createEnv.isPending}
-                onClick={() => createEnv.mutate({ tenantId, name, slug, gitBranch: gitBranch || undefined, gitFolder: gitFolder || undefined, argoAppName: argoAppName || undefined, autoPromote })}>
+                onClick={() => createEnv.mutate({ name, slug, gitBranch: gitBranch || undefined, gitFolder: gitFolder || undefined, argoAppName: argoAppName || undefined, autoPromote })}>
                 {createEnv.isPending ? "Creating..." : "Create Environment"}
               </Button>
             </div>
@@ -111,13 +144,53 @@ export default function Environments() {
                   {env.autoPromote ? "Auto-promote enabled" : "Manual promotion"}
                 </Badge>
               </div>
-              <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => toast.info("Promote to next environment — coming soon")}>
+              <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => openPromote(env)}>
                 Promote <ArrowRight className="w-3 h-3 ml-1" />
               </Button>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Promote Dialog */}
+      <Dialog open={!!promoteEnv} onOpenChange={open => { if (!open) setPromoteEnv(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Promote to {promoteNextEnv?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center gap-3 text-sm">
+              <Badge variant="outline">{promoteEnv?.name}</Badge>
+              <ArrowRight className="w-4 h-4 text-amber-500" />
+              <Badge className="bg-amber-100 text-amber-700">{promoteNextEnv?.name}</Badge>
+            </div>
+            {!promoteNextEnv?.clusterId && (
+              <p className="text-sm text-red-600">Target environment has no cluster — assign a cluster first.</p>
+            )}
+            <div>
+              <Label className="text-sm mb-2 block">APIs to promote</Label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {apiList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No APIs found</p>
+                ) : apiList.map((a: any) => (
+                  <div key={a.id} className="flex items-center gap-2">
+                    <Checkbox id={`promote-api-${a.id}`} checked={selectedApiIds.includes(a.id)}
+                      onCheckedChange={() => setSelectedApiIds(prev => prev.includes(a.id) ? prev.filter(id => id !== a.id) : [...prev, a.id])} />
+                    <label htmlFor={`promote-api-${a.id}`} className="text-sm cursor-pointer flex-1">
+                      {a.name} <span className="text-muted-foreground">v{a.version}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+              disabled={selectedApiIds.length === 0 || !promoteNextEnv?.clusterId || deployMutation.isPending}
+              onClick={runPromotion}>
+              {deployMutation.isPending ? "Promoting..." : `Promote ${selectedApiIds.length} API${selectedApiIds.length !== 1 ? "s" : ""}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {(!environments || environments.length === 0) && (
         <Card className="border-dashed">

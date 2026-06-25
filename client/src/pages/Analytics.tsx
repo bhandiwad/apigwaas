@@ -1,43 +1,66 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, TrendingUp, Users, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { BarChart3, TrendingUp, Users, Zap, Play } from "lucide-react";
 
 export default function AnalyticsPage() {
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const defaultTenantId = (tenants as any)?.[0]?.id || 1;
-  const { data: stats } = trpc.analytics.dashboard.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
-  const { data: usage } = trpc.analytics.usage.useQuery({ tenantId: defaultTenantId }, { enabled: !!defaultTenantId });
+  const { data: me } = trpc.auth.me.useQuery();
+  const isAdmin = (me as any)?.role === "admin";
+
+  // Platform admins see all usage if they have no personal tenant; otherwise scope to their tenant.
+  // We pass no tenantId for platform admins so the server uses the first registered tenant with data.
+  // Tenant members automatically scope to their own tenantId via ctx on the server.
+  const { data: stats, refetch: refetchStats } = trpc.analytics.dashboard.useQuery({}, { refetchInterval: 30_000 });
+  const { data: usage, refetch: refetchUsage } = trpc.analytics.usage.useQuery({}, { refetchInterval: 30_000 });
+  const { data: tenants } = trpc.tenant.list.useQuery(undefined, { enabled: isAdmin });
+  const tenant = isAdmin ? (tenants as any[])?.[0] : (me as any);
 
   const usageList = (usage as any[]) || [];
   const totalCalls = usageList.reduce((sum, u) => sum + (u.apiCalls || 0), 0);
   const totalErrors = usageList.reduce((sum, u) => sum + (u.errorCount || 0), 0);
-  const avgLatency = usageList.length > 0 ? usageList.reduce((sum, u) => sum + parseFloat(u.avgLatencyMs || "0"), 0) / usageList.length : 0;
+  const avgLatency = usageList.length > 0 ? usageList.reduce((sum, u) => sum + (u.avgLatencyMs || 0), 0) / usageList.length : 0;
   const errorRate = totalCalls > 0 ? ((totalErrors / totalCalls) * 100).toFixed(2) : "0.00";
 
   // Derive top APIs from usage records grouped by apiId
-  const apiUsageMap = new Map<number, { calls: number; latency: number; count: number }>();
+  const apiUsageMap = new Map<number, { name: string; calls: number; latency: number; count: number }>();
   usageList.forEach((u: any) => {
     if (u.apiId) {
-      const existing = apiUsageMap.get(u.apiId) || { calls: 0, latency: 0, count: 0 };
+      const existing = apiUsageMap.get(u.apiId) || { name: u.apiName ?? `API #${u.apiId}`, calls: 0, latency: 0, count: 0 };
       existing.calls += u.apiCalls || 0;
-      existing.latency += parseFloat(u.avgLatencyMs || "0");
+      existing.latency += u.avgLatencyMs || 0;
       existing.count += 1;
       apiUsageMap.set(u.apiId, existing);
     }
   });
-  const topApis = Array.from(apiUsageMap.entries())
-    .map(([id, data]) => ({ name: `API #${id}`, calls: data.calls, latency: Math.round(data.latency / data.count) }))
+  const topApis = Array.from(apiUsageMap.values())
+    .map(data => ({ name: data.name, calls: data.calls, latency: Math.round(data.latency / data.count) }))
     .sort((a, b) => b.calls - a.calls)
     .slice(0, 5);
 
   const maxCalls = topApis[0]?.calls || 1;
 
+  const simulateTraffic = trpc.analytics.simulateTraffic.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Simulated ${data.inserted} API calls — metrics updating…`);
+      setTimeout(() => { refetchUsage(); refetchStats(); }, 800);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground text-sm mt-1">Real-time API performance metrics and usage analytics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground text-sm mt-1">Real-time API performance metrics and usage analytics</p>
+        </div>
+        <Button variant="outline" size="sm" disabled={simulateTraffic.isPending}
+          onClick={() => simulateTraffic.mutate({ count: 100 })}>
+          <Play className="w-3.5 h-3.5 mr-1.5" />
+          {simulateTraffic.isPending ? "Simulating…" : "Simulate Traffic"}
+        </Button>
       </div>
 
       {/* KPI Row */}
@@ -129,9 +152,9 @@ export default function AnalyticsPage() {
           <CardContent>
             <div className="space-y-5">
               {[
-                { label: "API Calls", used: totalCalls, total: 10000000, color: "bg-amber-500" },
-                { label: "Data Transfer", used: Math.round(totalCalls * 0.002), total: 10240, unit: "MB", color: "bg-blue-500" },
-                { label: "Consumer Apps", used: (stats as any)?.totalConsumerApps || 0, total: 500, color: "bg-purple-500" },
+                { label: "API Calls", used: totalCalls, total: tenant?.includedCallsPerMonth ?? 10000000, color: "bg-amber-500" },
+                { label: "Data Transfer", used: Math.round(totalCalls * 0.002), total: (tenant?.dataTransferLimitGb ?? 100) * 1024, unit: "MB", color: "bg-blue-500" },
+                { label: "Consumer Apps", used: (stats as any)?.totalConsumerApps || 0, total: tenant?.maxConsumerApps ?? 500, color: "bg-purple-500" },
               ].map((q) => {
                 const pct = Math.min((q.used / q.total) * 100, 100);
                 return (

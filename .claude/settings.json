@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Bash(npm run *)",
+      "Bash(git diff:*)",
+      "Bash(pytest:*)",
+      "Read",
+      "Edit",
+      "Write"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Read(./.env*)",
+      "Read(./secrets/**)"
+    ]
+  }
+}

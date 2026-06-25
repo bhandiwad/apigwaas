@@ -19,9 +19,7 @@ export default function VaultSecrets() {
   const [elExpression, setElExpression] = useState("");
   const [mountPath, setMountPath] = useState("secret");
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: policies, refetch } = trpc.policy.list.useQuery({ tenantId });
+  const { data: policies, refetch } = trpc.policy.list.useQuery({});
   const vaultPolicies = policies?.filter((p: any) => p.type === "vault_secret") || [];
   const createPolicy = trpc.policy.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Vault secret resource created"); resetForm(); },
@@ -38,7 +36,7 @@ export default function VaultSecrets() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Vault Secret Resources (F-09)</h1>
+          <h1 className="text-2xl font-bold">Vault Secret Resources</h1>
           <p className="text-muted-foreground">HashiCorp Vault integration for dynamic secrets, KV v2, and certificate management</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -69,7 +67,7 @@ export default function VaultSecrets() {
                 <p className="text-xs text-muted-foreground mt-1">Use EL to reference secrets in policy configurations</p>
               </div>
               <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!name || !vaultPath || createPolicy.isPending}
-                onClick={() => createPolicy.mutate({ tenantId, name, type: "vault_secret", configuration: { secretEngine, mountPath, vaultPath, cacheTtl, elExpression } })}>
+                onClick={() => createPolicy.mutate({ name, type: "vault_secret", configuration: { secretEngine, mountPath, vaultPath, cacheTtl, elExpression } })}>
                 {createPolicy.isPending ? "Creating..." : "Create Secret Resource"}
               </Button>
             </div>
@@ -78,18 +76,17 @@ export default function VaultSecrets() {
       </div>
 
       {/* Vault Connection Status */}
-      <Card className="bg-green-50 border-green-200">
+      <Card className="bg-muted/30 border-dashed">
         <CardContent className="pt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-start gap-3">
-              <Lock className="w-5 h-5 text-green-600 mt-0.5" />
+              <Lock className="w-5 h-5 text-muted-foreground mt-0.5" />
               <div>
-                <p className="font-medium text-green-800">HashiCorp Vault Connected</p>
-                <p className="text-sm text-green-700 mt-1">Vault cluster: <code className="bg-green-100 px-1 rounded">https://vault.cloudinfinit.sify.com:8200</code></p>
-                <p className="text-xs text-green-600 mt-1">Auth: AppRole • Namespace: cloudinfinit/prod • Seal Status: Unsealed</p>
+                <p className="font-medium text-foreground">HashiCorp Vault</p>
+                <p className="text-sm text-muted-foreground mt-1">Configure <code className="bg-muted px-1 rounded">VAULT_ADDR</code> and <code className="bg-muted px-1 rounded">VAULT_ROLE_ID</code> in server environment to connect</p>
               </div>
             </div>
-            <Badge className="bg-green-100 text-green-700">Connected</Badge>
+            <Badge variant="outline">Not configured</Badge>
           </div>
         </CardContent>
       </Card>

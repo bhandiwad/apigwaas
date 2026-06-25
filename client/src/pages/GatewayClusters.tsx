@@ -14,10 +14,14 @@ import { Server, Plus, Activity, Cpu, HardDrive, Zap, Globe } from "lucide-react
 export default function GatewayClusters() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [region, setRegion] = useState("ap-south-1");
   const [tier, setTier] = useState<"shared" | "dedicated" | "sovereign">("shared");
   const [maxNodes, setMaxNodes] = useState(10);
   const [graviteeVersion, setGraviteeVersion] = useState("4.4.0");
+  const [graviteeEnvId, setGraviteeEnvId] = useState("DEFAULT");
+  const [graviteeOrgId, setGraviteeOrgId] = useState("DEFAULT");
+  const [managementUrl, setManagementUrl] = useState("");
 
   const { data: clusters, refetch } = trpc.gateway.clusters.useQuery();
   const createCluster = trpc.gateway.createCluster.useMutation({
@@ -25,7 +29,7 @@ export default function GatewayClusters() {
   });
   const updateCluster = trpc.gateway.updateCluster.useMutation({ onSuccess: () => refetch() });
 
-  function resetForm() { setName(""); setRegion("ap-south-1"); setTier("shared"); setMaxNodes(10); }
+  function resetForm() { setName(""); setDescription(""); setRegion("ap-south-1"); setTier("shared"); setMaxNodes(10); setGraviteeEnvId("DEFAULT"); setGraviteeOrgId("DEFAULT"); setManagementUrl(""); }
 
   const statusColor = (s: string) => {
     switch (s) {
@@ -51,32 +55,44 @@ export default function GatewayClusters() {
             <DialogHeader><DialogTitle>Create Gateway Cluster</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-4">
               <div><Label>Cluster Name</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="prod-mumbai-01" /></div>
-              <div><Label>Region</Label>
-                <Select value={region} onValueChange={setRegion}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ap-south-1">Mumbai (ap-south-1)</SelectItem>
-                    <SelectItem value="ap-south-2">Hyderabad (ap-south-2)</SelectItem>
-                    <SelectItem value="ap-southeast-1">Singapore (ap-southeast-1)</SelectItem>
-                    <SelectItem value="eu-west-1">Ireland (eu-west-1)</SelectItem>
-                    <SelectItem value="us-east-1">N. Virginia (us-east-1)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div><Label>Description (optional)</Label><Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Production gateway cluster" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Region</Label>
+                  <Select value={region} onValueChange={setRegion}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ap-south-1">Mumbai (ap-south-1)</SelectItem>
+                      <SelectItem value="ap-south-2">Hyderabad (ap-south-2)</SelectItem>
+                      <SelectItem value="ap-southeast-1">Singapore (ap-southeast-1)</SelectItem>
+                      <SelectItem value="eu-west-1">Ireland (eu-west-1)</SelectItem>
+                      <SelectItem value="us-east-1">N. Virginia (us-east-1)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Tier</Label>
+                  <Select value={tier} onValueChange={v => setTier(v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="shared">Shared</SelectItem>
+                      <SelectItem value="dedicated">Dedicated</SelectItem>
+                      <SelectItem value="sovereign">Sovereign</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div><Label>Tier</Label>
-                <Select value={tier} onValueChange={v => setTier(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="shared">Shared</SelectItem>
-                    <SelectItem value="dedicated">Dedicated</SelectItem>
-                    <SelectItem value="sovereign">Sovereign</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div><Label>Gravitee Management URL</Label><Input value={managementUrl} onChange={e => setManagementUrl(e.target.value)} placeholder="http://gateway-host:8083" className="font-mono text-sm" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Gravitee Org ID</Label><Input value={graviteeOrgId} onChange={e => setGraviteeOrgId(e.target.value)} placeholder="DEFAULT" className="font-mono text-sm" /></div>
+                <div><Label>Gravitee Env ID</Label><Input value={graviteeEnvId} onChange={e => setGraviteeEnvId(e.target.value)} placeholder="DEFAULT" className="font-mono text-sm" /></div>
               </div>
-              <div><Label>Max Nodes</Label><Input type="number" value={maxNodes} onChange={e => setMaxNodes(Number(e.target.value))} /></div>
-              <div><Label>Gravitee Version</Label><Input value={graviteeVersion} onChange={e => setGraviteeVersion(e.target.value)} /></div>
-              <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" onClick={() => createCluster.mutate({ name, region, tier, maxNodes, graviteeVersion })} disabled={!name || createCluster.isPending}>
-                {createCluster.isPending ? "Creating..." : "Create Cluster"}
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Max Nodes</Label><Input type="number" value={maxNodes} onChange={e => setMaxNodes(Number(e.target.value))} /></div>
+                <div><Label>Gravitee Version</Label><Input value={graviteeVersion} onChange={e => setGraviteeVersion(e.target.value)} placeholder="4.4.32" /></div>
+              </div>
+              <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => createCluster.mutate({ name, description, region, tier, maxNodes, graviteeVersion, graviteeEnvId, graviteeOrgId, managementUrl: managementUrl || undefined })}
+                disabled={!name || !managementUrl || createCluster.isPending}>
+                {createCluster.isPending ? "Creating..." : "Register Cluster"}
               </Button>
             </div>
           </DialogContent>
@@ -101,6 +117,11 @@ export default function GatewayClusters() {
                 <span className="capitalize">{cluster.tier}</span>
                 {cluster.graviteeVersion && <><span className="mx-1">•</span>v{cluster.graviteeVersion}</>}
               </div>
+              {cluster.managementUrl && (
+                <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                  env:{cluster.graviteeEnvId || "DEFAULT"} · {cluster.managementUrl}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-3 text-center">

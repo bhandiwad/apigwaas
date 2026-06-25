@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { SifyLogo } from "@/components/SifyLogo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -54,7 +55,12 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 type MenuSection = {
   title: string;
@@ -84,6 +90,7 @@ const menuSections: MenuSection[] = [
   {
     title: "GATEWAY",
     items: [
+      { icon: GitBranch, label: "GitOps Pipeline", path: "/gitops-pipeline" },
       { icon: Server, label: "Clusters", path: "/gateway-clusters" },
       { icon: Rocket, label: "Deployments", path: "/deployments" },
       { icon: Workflow, label: "API Designer", path: "/api-designer" },
@@ -93,7 +100,6 @@ const menuSections: MenuSection[] = [
       { icon: Key, label: "Vault Secrets", path: "/vault-secrets" },
       { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
       { icon: Radio, label: "Event Entrypoints", path: "/event-entrypoints" },
-      { icon: Globe, label: "Multi-Region", path: "/multi-region" },
       { icon: GitBranch, label: "Environments", path: "/environments" },
       { icon: Radio, label: "Kafka Reporter", path: "/kafka-reporter" },
     ],
@@ -113,6 +119,7 @@ const menuSections: MenuSection[] = [
       { icon: Activity, label: "Metering", path: "/metering" },
       { icon: CreditCard, label: "Billing", path: "/billing" },
       { icon: FileText, label: "Audit Trail", path: "/audit" },
+      { icon: FileText, label: "Logs", path: "/logs" },
     ],
   },
   {
@@ -161,18 +168,9 @@ export default function DashboardLayout({
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold tracking-tight">
-                <span className="text-primary">infinit</span>
-                <span className="text-foreground">AIZEN</span>
-              </span>
-            </div>
-            <h1 className="text-xl font-semibold tracking-tight text-center">
-              CloudInfinit API Gateway
-            </h1>
+            <SifyLogo withLabel className="text-2xl mb-1" />
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Enterprise API management platform. Sign in to access your
-              dashboard.
+              Enterprise API management platform. Sign in to access your dashboard.
             </p>
           </div>
           <Button
@@ -189,6 +187,10 @@ export default function DashboardLayout({
     );
   }
 
+  if (!user.tenantId) {
+    return <OnboardingScreen />;
+  }
+
   return (
     <SidebarProvider
       style={
@@ -201,6 +203,105 @@ export default function DashboardLayout({
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
+  );
+}
+
+// ─── Onboarding Screen ────────────────────────────────────────────────────────
+function OnboardingScreen() {
+  const utils = trpc.useUtils();
+  const [form, setForm] = useState({
+    name: "",
+    tier: "starter" as "starter" | "business" | "enterprise" | "sovereign",
+    region: "mumbai",
+    contactEmail: "",
+  });
+
+  const createTenant = trpc.tenant.create.useMutation({
+    onSuccess: async () => {
+      toast.success("Organisation created — welcome aboard!");
+      await utils.auth.me.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background px-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center space-y-1">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <span className="text-2xl font-bold tracking-tight">
+              <span className="text-primary">Cloud</span>
+              <span className="text-foreground">Infinit</span>
+            </span>
+          </div>
+          <h1 className="text-xl font-semibold">Create Your Organisation</h1>
+          <p className="text-sm text-muted-foreground">
+            Set up your tenant to start managing APIs on sifycloudinfinit API Gateway.
+          </p>
+        </div>
+
+        <Card className="border border-border/60 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Organisation Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>Organisation Name</Label>
+              <Input
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="Acme Corp"
+                className="mt-1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Plan</Label>
+                <Select value={form.tier} onValueChange={v => setForm({ ...form, tier: v as typeof form.tier })}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="starter">Starter</SelectItem>
+                    <SelectItem value="business">Business</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                    <SelectItem value="sovereign">Sovereign</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Region</Label>
+                <Select value={form.region} onValueChange={v => setForm({ ...form, region: v })}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mumbai">Mumbai</SelectItem>
+                    <SelectItem value="delhi">Delhi</SelectItem>
+                    <SelectItem value="bangalore">Bangalore</SelectItem>
+                    <SelectItem value="chennai">Chennai</SelectItem>
+                    <SelectItem value="hyderabad">Hyderabad</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Contact Email</Label>
+              <Input
+                type="email"
+                value={form.contactEmail}
+                onChange={e => setForm({ ...form, contactEmail: e.target.value })}
+                placeholder="admin@yourcompany.com"
+                className="mt-1"
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!form.name || createTenant.isPending}
+              onClick={() => createTenant.mutate(form)}
+            >
+              {createTenant.isPending ? "Creating..." : "Create Organisation & Continue"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
@@ -302,13 +403,10 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-sidebar-foreground/60" />
               </button>
               {!isCollapsed ? (
-                <div className="flex items-center gap-1 min-w-0">
-                  <span className="font-bold text-lg tracking-tight truncate">
-                    <span className="text-primary">infinit</span>
-                    <span className="text-sidebar-foreground">AIZEN</span>
-                  </span>
-                </div>
-              ) : null}
+                <SifyLogo withLabel />
+              ) : (
+                <SifyLogo collapsed />
+              )}
             </div>
           </SidebarHeader>
 

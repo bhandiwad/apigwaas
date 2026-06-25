@@ -12,29 +12,37 @@ import { toast } from "sonner";
 
 export default function StatusPage() {
   const { data: incidents, refetch } = trpc.status.incidents.useQuery();
+  const { data: clusters } = trpc.gateway.clusters.useQuery();
+  const { data: gatewayStatus } = trpc.gateway.connectionStatus.useQuery();
   const createMutation = trpc.status.createIncident.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Incident reported"); } });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", severity: "minor" as "minor" | "major" | "critical" });
 
   const incidentList = (incidents as any[]) || [];
+  const clusterList = (clusters as any[]) || [];
   const activeIncidents = incidentList.filter(i => i.status !== "resolved");
   const resolvedIncidents = incidentList.filter(i => i.status === "resolved");
 
-  const regions = [
-    { name: "Mumbai (ap-south-1)", status: activeIncidents.some(i => i.affectedRegions?.includes("mumbai")) ? "degraded" : "operational", latency: "12ms" },
-    { name: "Chennai (ap-south-2)", status: activeIncidents.some(i => i.affectedRegions?.includes("chennai")) ? "degraded" : "operational", latency: "15ms" },
-    { name: "Hyderabad (ap-south-3)", status: activeIncidents.some(i => i.affectedRegions?.includes("hyderabad")) ? "degraded" : "operational", latency: "18ms" },
-  ];
+  // Regions derived from real registered gateway clusters
+  const regions = clusterList.map((c: any) => ({
+    id: c.id,
+    name: `${c.name} (${c.region})`,
+    status: c.status === "healthy" ? "operational" : c.status === "degraded" ? "degraded" : "outage",
+    tier: c.tier,
+    graviteeEnvId: c.graviteeEnvId,
+    nodeCount: c.nodeCount,
+    cpuUsagePercent: c.cpuUsagePercent,
+  }));
 
+  // Services: Gravitee connection status from real health check + incident-derived state
+  const graviteeConnected = (gatewayStatus as any)?.connected ?? false;
   const services = [
-    { name: "API Gateway", status: "operational" },
-    { name: "Authentication Service", status: "operational" },
+    { name: "Gravitee Management API", status: graviteeConnected ? "operational" : "outage" },
+    { name: "API Gateway Runtime", status: clusterList.some((c: any) => c.status === "healthy") ? "operational" : clusterList.length === 0 ? "outage" : "degraded" },
+    { name: "Authentication Service", status: activeIncidents.some((i: any) => i.title?.toLowerCase().includes("auth")) ? "degraded" : "operational" },
     { name: "Rate Limiter", status: "operational" },
     { name: "Analytics Pipeline", status: "operational" },
     { name: "Billing Service", status: "operational" },
-    { name: "Certificate Manager", status: "operational" },
-    { name: "DNS Resolution", status: activeIncidents.length > 0 ? "degraded" : "operational" },
-    { name: "Log Aggregation", status: "operational" },
   ];
 
   const overallStatus = activeIncidents.some(i => i.severity === "critical") ? "outage" : activeIncidents.length > 0 ? "degraded" : "operational";
@@ -89,26 +97,37 @@ export default function StatusPage() {
         </CardContent>
       </Card>
 
-      {/* Regions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {regions.map((r) => (
-          <Card key={r.name} className="border border-border/60">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Server className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">{r.name}</span>
+      {/* Gateway Clusters / Regions */}
+      {regions.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {regions.map((r) => (
+            <Card key={r.id} className="border border-border/60">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">{r.name}</span>
+                  </div>
+                  {statusIcon(r.status)}
                 </div>
-                {statusIcon(r.status)}
-              </div>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <Badge variant="secondary" className={statusColors[r.status]}>{r.status}</Badge>
-                <span>Latency: {r.latency}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <Badge variant="secondary" className={statusColors[r.status]}>{r.status}</Badge>
+                  <span className="capitalize">{r.tier} · env:{r.graviteeEnvId || "DEFAULT"} · {r.nodeCount} node{r.nodeCount !== 1 ? "s" : ""}</span>
+                </div>
+                {r.cpuUsagePercent > 0 && (
+                  <div className="mt-2 text-xs text-muted-foreground">CPU: {r.cpuUsagePercent}%</div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="border border-border/60">
+          <CardContent className="p-4 text-sm text-muted-foreground text-center py-6">
+            No gateway clusters registered. Add a cluster under Gateway → Clusters.
+          </CardContent>
+        </Card>
+      )}
 
       {/* Services */}
       <Card className="border border-border/60">
@@ -179,20 +198,9 @@ export default function StatusPage() {
       <Card className="border border-border/60">
         <CardHeader className="pb-3"><CardTitle className="text-base">Scheduled Maintenance</CardTitle></CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {[
-              { title: "Certificate rotation — all regions", date: "May 18, 2026 02:00-04:00 IST", impact: "No downtime expected" },
-              { title: "Database maintenance — Mumbai", date: "May 25, 2026 01:00-03:00 IST", impact: "Brief failover (< 30s)" },
-            ].map((m) => (
-              <div key={m.title} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/40">
-                <Clock className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium">{m.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{m.date}</p>
-                  <p className="text-xs text-muted-foreground">{m.impact}</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>No maintenance windows scheduled</span>
           </div>
         </CardContent>
       </Card>

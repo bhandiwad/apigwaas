@@ -19,9 +19,7 @@ export default function DcrClients() {
   const [redirectUris, setRedirectUris] = useState("");
   const [credentials, setCredentials] = useState<{ clientId: string; clientSecret: string; registrationAccessToken: string } | null>(null);
 
-  const { data: tenants } = trpc.tenant.list.useQuery();
-  const tenantId = tenants?.[0]?.id || 1;
-  const { data: clients, refetch } = trpc.dcr.clients.useQuery({ tenantId });
+  const { data: clients, refetch } = trpc.dcr.clients.useQuery();
   const register = trpc.dcr.register.useMutation({
     onSuccess: (data) => { refetch(); setCredentials({ clientId: data.clientId, clientSecret: data.clientSecret, registrationAccessToken: data.registrationAccessToken }); toast.success("Client registered via DCR"); },
   });
@@ -48,7 +46,7 @@ export default function DcrClients() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dynamic Client Registration (F-06)</h1>
+          <h1 className="text-2xl font-bold">Dynamic Client Registration</h1>
           <p className="text-muted-foreground">RFC 7591/7592 compliant client registration and management</p>
         </div>
         <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) setCredentials(null); }}>
@@ -103,7 +101,7 @@ export default function DcrClients() {
                 <div><Label>Redirect URIs (comma-separated)</Label><Input value={redirectUris} onChange={e => setRedirectUris(e.target.value)} placeholder="https://app.example.com/callback" /></div>
                 <div><Label>Scope</Label><Input value={scope} onChange={e => setScope(e.target.value)} placeholder="read write admin" /></div>
                 <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!clientName || register.isPending}
-                  onClick={() => register.mutate({ tenantId, clientName, grantTypes: grantTypes.split(","), tokenEndpointAuthMethod, scope: scope || undefined, redirectUris: redirectUris ? redirectUris.split(",").map(u => u.trim()) : undefined })}>
+                  onClick={() => register.mutate({ clientName, grantTypes: grantTypes.split(","), tokenEndpointAuthMethod, scope: scope || undefined, redirectUris: redirectUris ? redirectUris.split(",").map(u => u.trim()) : undefined })}>
                   {register.isPending ? "Registering..." : "Register Client"}
                 </Button>
               </div>
