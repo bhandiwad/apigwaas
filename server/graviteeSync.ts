@@ -294,6 +294,25 @@ export async function stopApiHybrid(apiId: number) {
   return { stopped: true, synced: false };
 }
 
+export async function deleteApiHybrid(apiId: number) {
+  const status = await getConnectionStatus();
+  if (status.mode === "live") {
+    const localApi = await db.getApiById(apiId);
+    const graviteeApiId = (localApi as any)?.graviteeApiId;
+    if (graviteeApiId) {
+      // Gravitee requires an API to be stopped before it can be deleted.
+      try { await gravitee.stopApi(graviteeApiId); } catch { /* already stopped */ }
+      try {
+        await gravitee.deleteApi(graviteeApiId);
+      } catch (err: any) {
+        if (err?.response?.status !== 404) throw err; // 404 = already gone, treat as success
+      }
+      return { deleted: true, synced: true };
+    }
+  }
+  return { deleted: true, synced: false };
+}
+
 // ─── API Flow (Policy Chain) Sync ────────────────────────────────────────────
 export async function saveApiFlowsHybrid(apiId: number, flows: { phase: "request" | "response"; type: string; config: Record<string, any> }[]) {
   const localApi = await db.getApiById(apiId);

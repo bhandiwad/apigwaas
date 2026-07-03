@@ -24,6 +24,15 @@ function actor(ctx: { user: { id: number; name?: string | null; email?: string |
   return { actorId: ctx.user.id, actorName: ctx.user.name || ctx.user.email || undefined };
 }
 
+// Extract Gravitee's real error message from an axios failure instead of the
+// opaque "Request failed with status code 4xx" that axios surfaces by default.
+function graviteeErrorMessage(err: any, fallback: string): string {
+  const g = err?.response?.data;
+  const detail = g?.message || g?.error
+    || (Array.isArray(g?.errors) && g.errors.length ? g.errors.map((e: any) => e.message || e).join("; ") : null);
+  return detail ? `${fallback}: ${detail}` : fallback;
+}
+
 // ─── Tenant Router ───────────────────────────────────────────────────────────
 const tenantRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -264,20 +273,31 @@ const apiRouter = router({
     tags: z.array(z.string()).optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
-    await db.updateApi(id, data);
 
+    // Publishing must succeed on the gateway BEFORE we mark it published locally,
+    // otherwise the UI shows "published" for an API that isn't actually deployed.
     if (data.status === "published") {
-      await graviteeSync.publishApiHybrid(id);
+      try {
+        await graviteeSync.publishApiHybrid(id);
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: graviteeErrorMessage(err, "Failed to publish API to the gateway") });
+      }
     }
 
+    await db.updateApi(id, data);
     await db.createAuditEvent({ action: "api.updated", actionType: "update", targetType: "api", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const api = await db.getApiById(input.id);
     if (!api || (api as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
+    // Remove from Gravitee first so the context-path is freed and no orphan API is left behind.
+    try {
+      await graviteeSync.deleteApiHybrid(input.id);
+    } catch (err) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: graviteeErrorMessage(err, "Failed to delete API from the gateway") });
+    }
     await db.deleteApi(input.id);
-    graviteeSync.stopApiHybrid(input.id).catch(() => {});
     await db.createAuditEvent({ action: "api.deleted", actionType: "delete", targetType: "api", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),

@@ -34,6 +34,7 @@ export default function ApiDetailPage() {
       utils.api.getById.invalidate({ id: apiId });
       toast.success(vars.status === "published" ? "API published" : vars.status === "deprecated" ? "API deprecated" : "API updated");
     },
+    onError: (err) => toast.error(err.message),
   });
 
   const attachPolicy = trpc.policyChain.add.useMutation({
