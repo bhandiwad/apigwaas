@@ -880,20 +880,28 @@ export async function importOpenApiHybrid(spec: string, tenantId: number, worksp
   
   if (status.mode === "live") {
     try {
-      const graviteeApi = await gravitee.importApiFromOpenApi(spec);
-      
-      // Also create local record
+      const graviteeApi: any = await gravitee.importApiFromOpenApi(spec);
+
+      // Gravitee derives these from the spec (server basePath -> context path,
+      // servers[0].url -> backend endpoint).
+      const contextPath: string | undefined =
+        (graviteeApi.listeners?.[0]?.paths?.[0]?.path || "").replace(/\/$/, "") || undefined;
+      const backendUrl: string | undefined =
+        graviteeApi.endpointGroups?.[0]?.endpoints?.[0]?.configuration?.target || undefined;
+
       const localId = await db.createApi({
         tenantId,
         workspaceId,
-        name: graviteeApi.name,
+        name: graviteeApi.name || "Imported API",
         version: graviteeApi.apiVersion || "1.0.0",
         protocol: "rest",
         description: graviteeApi.description,
+        backendUrl,
+        contextPath,
         graviteeApiId: graviteeApi.id,
       } as any);
 
-      return { id: localId, graviteeApiId: graviteeApi.id, synced: true };
+      return { id: localId, graviteeApiId: graviteeApi.id, synced: true, name: graviteeApi.name, contextPath, backendUrl };
     } catch (error) {
       logger.warn({ err: error }, "[GraviteeSync] Failed to import OpenAPI to Gravitee:");
       // Fall through to local-only import
@@ -915,10 +923,11 @@ export async function importOpenApiHybrid(spec: string, tenantId: number, worksp
     version: parsed.info?.version || "1.0.0",
     protocol: "rest",
     description: parsed.info?.description,
+    backendUrl: parsed.servers?.[0]?.url,
     openApiSpec: spec,
   } as any);
 
-  return { id: localId, synced: false };
+  return { id: localId, synced: false, name: parsed.info?.title || "Imported API" };
 }
 
 // ─── Developer Portal Sync ───────────────────────────────────────────────────

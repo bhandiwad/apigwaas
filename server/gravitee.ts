@@ -337,10 +337,11 @@ export async function deleteApi(apiId: string): Promise<void> {
   await client.delete(v2Path(`/apis/${apiId}`));
 }
 
-export async function importApiFromOpenApi(spec: string | object): Promise<GraviteeApi> {
+export async function importApiFromOpenApi(payload: string, withDocumentation = false): Promise<GraviteeApi> {
   const client = getClient();
-  const payload = typeof spec === "string" ? { payload: spec, type: "INLINE" } : spec;
-  const response = await client.post(v2Path("/apis/_import/openapi"), payload);
+  // v4 native import: accepts inline JSON or YAML content and builds the API
+  // (context path, backend endpoint, per-operation flows) from the spec.
+  const response = await client.post(v2Path("/apis/_import/swagger"), { payload, withDocumentation });
   return response.data;
 }
 

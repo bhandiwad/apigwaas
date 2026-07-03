@@ -24,6 +24,30 @@ function actor(ctx: { user: { id: number; name?: string | null; email?: string |
   return { actorId: ctx.user.id, actorName: ctx.user.name || ctx.user.email || undefined };
 }
 
+// Fetch an OpenAPI spec from a URL for "import from link", with a basic SSRF
+// guard against internal addresses and a size/time cap.
+async function fetchOpenApiSpec(url: string): Promise<string> {
+  let u: URL;
+  try { u = new URL(url); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid URL." }); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new TRPCError({ code: "BAD_REQUEST", message: "Spec URL must be http(s)." });
+  const host = u.hostname.toLowerCase();
+  if (host === "localhost" || host === "0.0.0.0" || host.endsWith(".internal") ||
+      /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(host)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "That URL points to an internal address." });
+  }
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { Accept: "application/json, application/yaml, text/yaml, text/plain" } });
+  } catch {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Could not reach that URL." });
+  }
+  if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `Could not fetch spec (HTTP ${res.status}).` });
+  const text = await res.text();
+  if (text.length > 5_000_000) throw new TRPCError({ code: "BAD_REQUEST", message: "Spec is too large (>5MB)." });
+  if (!text.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "The URL returned an empty document." });
+  return text;
+}
+
 // Extract Gravitee's real error message from an axios failure instead of the
 // opaque "Request failed with status code 4xx" that axios surfaces by default.
 function graviteeErrorMessage(err: any, fallback: string): string {
@@ -259,6 +283,27 @@ const apiRouter = router({
     if (input.contextPath) validateContextPath(input.contextPath);
     const result = await graviteeSync.createApiHybrid({ ...input, tenantId: ctx.tenantId });
     await db.createAuditEvent({ action: "api.created", actionType: "create", targetType: "api", targetId: String(result.id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
+    return result;
+  }),
+  // Native Gravitee OpenAPI/Swagger import — from pasted/uploaded content or a URL.
+  importOpenApi: tenantWriteProcedure.input(z.object({
+    workspaceId: z.number(),
+    content: z.string().optional(),
+    url: z.string().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    if (!input.content && !input.url) throw new TRPCError({ code: "BAD_REQUEST", message: "Provide a spec file/content or a URL." });
+    const quota = await db.checkQuota(ctx.tenantId, "apis");
+    if (!quota.allowed) throw new TRPCError({ code: "FORBIDDEN", message: `API limit reached (${quota.current}/${quota.limit} on your plan). Upgrade to add more.` });
+    const hasAccess = await db.userHasWorkspaceAccess(ctx.user.id, input.workspaceId, ctx.tenantId);
+    if (!hasAccess) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this workspace" });
+    const content = input.content ?? await fetchOpenApiSpec(input.url!);
+    let result;
+    try {
+      result = await graviteeSync.importOpenApiHybrid(content, ctx.tenantId, input.workspaceId);
+    } catch (err) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: graviteeErrorMessage(err, "Failed to import the OpenAPI spec") });
+    }
+    await db.createAuditEvent({ action: "api.imported", actionType: "create", targetType: "api", targetId: String(result.id), targetName: (result as any).name, tenantId: ctx.tenantId, ...actor(ctx) });
     return result;
   }),
   update: tenantProcedure.input(z.object({

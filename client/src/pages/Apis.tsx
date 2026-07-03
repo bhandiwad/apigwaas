@@ -25,8 +25,17 @@ export default function ApisPage() {
     onSuccess: () => { refetch(); setOpen(false); toast.success("API created"); },
     onError: (e) => toast.error(e.message),
   });
+  const importMutation = trpc.api.importOpenApi.useMutation({
+    onSuccess: (r: any) => {
+      refetch(); setImportOpen(false); setImportSpec(""); setImportUrl("");
+      toast.success(`Imported "${r.name}"${r.contextPath ? ` at ${r.contextPath}` : ""}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<"file" | "url">("file");
+  const [importUrl, setImportUrl] = useState("");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ name: "", version: "1.0.0", protocol: "rest" as const, backendUrl: "", contextPath: "", description: "", workspaceId: qsWorkspaceId ? String(qsWorkspaceId) : "" });
   const [importSpec, setImportSpec] = useState("");
@@ -37,30 +46,22 @@ export default function ApisPage() {
   const protocolColors: Record<string, string> = { rest: "bg-blue-100 text-blue-700", graphql: "bg-pink-100 text-pink-700", grpc: "bg-purple-100 text-purple-700", websocket: "bg-orange-100 text-orange-700", kafka: "bg-teal-100 text-teal-700", mqtt: "bg-cyan-100 text-cyan-700" };
 
   const handleImportOpenAPI = () => {
-    try {
-      const spec = JSON.parse(importSpec);
-      const info = spec.info || {};
-      const name = info.title || "Imported API";
-      const version = info.version || "1.0.0";
-      const description = info.description || "";
-      const servers = spec.servers || [];
-      const backendUrl = servers[0]?.url || "";
-      const wsId = workspaceList[0]?.id;
-      if (!wsId) { toast.error("Create a workspace first"); return; }
-      createMutation.mutate({
-        workspaceId: wsId,
-        name,
-        version,
-        protocol: "rest",
-        backendUrl,
-        description,
-        openApiSpec: spec,
-      }, {
-        onSuccess: () => { setImportOpen(false); setImportSpec(""); toast.success(`Imported "${name}" from OpenAPI spec`); }
-      });
-    } catch {
-      toast.error("Invalid JSON. Please paste a valid OpenAPI 3.x specification.");
+    const wsId = qsWorkspaceId ?? workspaceList[0]?.id;
+    if (!wsId) { toast.error("Create a workspace first"); return; }
+    if (importMode === "url") {
+      if (!importUrl.trim()) return;
+      importMutation.mutate({ workspaceId: wsId, url: importUrl.trim() });
+    } else {
+      if (!importSpec.trim()) return;
+      importMutation.mutate({ workspaceId: wsId, content: importSpec });
     }
+  };
+
+  const handleSpecFile = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImportSpec(String(reader.result || ""));
+    reader.readAsText(file);
   };
 
   const activeWorkspace = qsWorkspaceId
@@ -94,18 +95,34 @@ export default function ApisPage() {
               <Button variant="outline"><Upload className="h-4 w-4 mr-2" />Import OpenAPI</Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle className="flex items-center gap-2"><FileJson className="h-5 w-5 text-primary" />Import OpenAPI Specification</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><FileJson className="h-5 w-5 text-primary" />Import from OpenAPI / Swagger</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
-                <p className="text-sm text-muted-foreground">Paste your OpenAPI 3.x JSON specification below. The API name, version, description, and backend URL will be extracted automatically.</p>
-                <Textarea
-                  value={importSpec}
-                  onChange={e => setImportSpec(e.target.value)}
-                  placeholder='{"openapi": "3.0.0", "info": {"title": "My API", "version": "1.0.0"}, "servers": [{"url": "https://api.example.com"}], "paths": {...}}'
-                  rows={12}
-                  className="font-mono text-xs"
-                />
-                <Button className="w-full" onClick={handleImportOpenAPI} disabled={!importSpec.trim() || createMutation.isPending}>
-                  {createMutation.isPending ? "Importing..." : "Import & Create API"}
+                <p className="text-sm text-muted-foreground">Gravitee builds the API — context path, backend endpoint and per-operation flows — from the spec. Accepts OpenAPI 3.x or Swagger 2.0, in JSON or YAML.</p>
+                <div className="flex gap-2">
+                  <Button variant={importMode === "file" ? "default" : "outline"} size="sm" onClick={() => setImportMode("file")}>From file</Button>
+                  <Button variant={importMode === "url" ? "default" : "outline"} size="sm" onClick={() => setImportMode("url")}>From URL</Button>
+                </div>
+                {importMode === "file" ? (
+                  <div className="space-y-2">
+                    <Input type="file" accept=".json,.yaml,.yml,.txt,application/json,text/yaml" onChange={e => handleSpecFile(e.target.files?.[0])} />
+                    <Textarea
+                      value={importSpec}
+                      onChange={e => setImportSpec(e.target.value)}
+                      placeholder="…or paste the spec here (JSON or YAML)"
+                      rows={10}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <Label>Spec URL</Label>
+                    <Input value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="https://petstore3.swagger.io/api/v3/openapi.json" className="font-mono text-sm" />
+                    <p className="text-xs text-muted-foreground mt-1">Must be a public http(s) URL.</p>
+                  </div>
+                )}
+                <Button className="w-full" onClick={handleImportOpenAPI}
+                  disabled={importMutation.isPending || (importMode === "url" ? !importUrl.trim() : !importSpec.trim())}>
+                  {importMutation.isPending ? "Importing…" : "Import API"}
                 </Button>
               </div>
             </DialogContent>
