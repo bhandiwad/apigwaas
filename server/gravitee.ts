@@ -140,21 +140,40 @@ export interface GraviteeHealthStatus {
   latencyMs?: number;
 }
 
+// The health probe must fail fast: it is batched with data queries by the tRPC
+// client, so if it blocks (the shared client's 30s timeout + retries when
+// Gravitee is unreachable) the whole UI hangs on "Checking…" instead of falling
+// back to local mode. Bound it hard and bypass the retrying client.
+const HEALTH_PROBE_TIMEOUT_MS = 4000;
+
 export async function checkGraviteeHealth(): Promise<GraviteeHealthStatus> {
   if (!isGraviteeConfigured()) {
     return { connected: false, error: "Gravitee not configured (set GRAVITEE_API_URL + credentials)" };
   }
 
   const start = Date.now();
-  try {
-    const client = getClient();
-    const response = await client.get("/management/v2/environments");
+  const probe = (async (): Promise<GraviteeHealthStatus> => {
+    const config = getConfig();
+    const token = await resolveAuthToken();
+    const response = await axios.get(`${config.baseUrl}/management/v2/environments`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      timeout: HEALTH_PROBE_TIMEOUT_MS,
+    });
     return {
       connected: true,
       version: response.headers["x-gravitee-version"] || "unknown",
       status: "healthy",
       latencyMs: Date.now() - start,
     };
+  })();
+  const timeout = new Promise<GraviteeHealthStatus>((resolve) =>
+    setTimeout(
+      () => resolve({ connected: false, error: "Health check timed out", latencyMs: Date.now() - start }),
+      HEALTH_PROBE_TIMEOUT_MS
+    )
+  );
+  try {
+    return await Promise.race([probe, timeout]);
   } catch (error: any) {
     return {
       connected: false,
