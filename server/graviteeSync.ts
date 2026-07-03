@@ -345,6 +345,101 @@ export async function saveApiFlowsHybrid(apiId: number, flows: { phase: "request
   return { saved: true, synced: false };
 }
 
+// ─── Gateway Policy Enforcement (data masking) ───────────────────────────────
+
+const MASKING_FLOW_NAME = "cloudinfinit-data-masking";
+
+// Generates a Groovy script that redacts the configured JSON paths in the
+// response body. Runs as a Gravitee `groovy` response-content policy.
+function buildMaskingGroovyScript(
+  rules: Array<{ jsonPath: string; action: string; replacement: string | null; showLastN: number | null }>
+): string {
+  const ruleLiterals = rules.map(r => {
+    const path = r.jsonPath.replace(/^\$\.?/, ""); // "$.user.pan" -> "user.pan"
+    return `['path': ${JSON.stringify(path)}, 'action': ${JSON.stringify(r.action)}, 'replacement': ${JSON.stringify(r.replacement || "***REDACTED***")}, 'showLastN': ${Number(r.showLastN) || 0}]`;
+  }).join(",\n  ");
+  return `import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+def rules = [
+  ${ruleLiterals}
+]
+def maskValue(value, rule) {
+  if (value == null) return value
+  def s = value.toString()
+  switch (rule.action) {
+    case 'hash_sha256':
+      return MessageDigest.getInstance('SHA-256').digest(s.getBytes('UTF-8')).encodeHex().toString()
+    case 'partial':
+      int n = (rule.showLastN ?: 0) as int
+      if (n <= 0 || n >= s.length()) return rule.replacement
+      return ('*' * (s.length() - n)) + s.substring(s.length() - n)
+    default:
+      return rule.replacement
+  }
+}
+try {
+  def obj = new JsonSlurper().parseText(response.content)
+  rules.each { rule ->
+    def parts = rule.path.split('\\\\.')
+    def cur = obj
+    for (int i = 0; i < parts.size() - 1; i++) {
+      if (cur instanceof Map && cur.containsKey(parts[i])) { cur = cur[parts[i]] } else { cur = null; break }
+    }
+    if (cur instanceof Map && cur.containsKey(parts[-1])) {
+      cur[parts[-1]] = maskValue(cur[parts[-1]], rule)
+    }
+  }
+  return JsonOutput.toJson(obj)
+} catch (e) {
+  // Non-JSON or unparseable body — pass through unchanged.
+  return response.content
+}`;
+}
+
+function buildMaskingFlow(rules: any[]) {
+  return {
+    name: MASKING_FLOW_NAME,
+    enabled: true,
+    selectors: [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }],
+    request: [],
+    response: [{
+      name: "Mask sensitive fields",
+      policy: "groovy",
+      enabled: true,
+      configuration: {
+        readContent: true,
+        overrideContent: true,
+        onResponseContentScript: buildMaskingGroovyScript(rules),
+      },
+    }],
+  };
+}
+
+// Compiles the API's response-phase masking rules into a Groovy policy on the
+// Gravitee API flow and redeploys, so masking is actually enforced at the gateway.
+export async function deployApiMaskingToGateway(apiId: number) {
+  const status = await getConnectionStatus();
+  if (status.mode !== "live") throw new Error("Gravitee is not reachable — cannot deploy masking to the gateway.");
+  const localApi = await db.getApiById(apiId);
+  if (!localApi) throw new Error("API not found");
+  const graviteeApiId = (localApi as any).graviteeApiId;
+  if (!graviteeApiId) throw new Error("Publish the API to the gateway before deploying masking rules.");
+
+  // Apply rules scoped to this API plus tenant-wide rules (apiId = null).
+  const rules = (await db.getMaskingRules((localApi as any).tenantId))
+    .filter((r: any) => (r.apiId === apiId || r.apiId == null)
+      && r.enabled !== false && (r.phase === "response" || r.phase === "both"));
+
+  const api = await gravitee.getApi(graviteeApiId);
+  const existingFlows = ((api as any).flows || []).filter((f: any) => f.name !== MASKING_FLOW_NAME);
+  const flows = rules.length > 0 ? [...existingFlows, buildMaskingFlow(rules)] : existingFlows;
+
+  await gravitee.updateApi(graviteeApiId, { ...(api as any), flows });
+  await gravitee.deployApi(graviteeApiId);
+  return { deployed: true, rules: rules.length };
+}
+
 // ─── Gateway Instances Sync ──────────────────────────────────────────────────
 
 export async function getGatewayInstancesHybrid() {

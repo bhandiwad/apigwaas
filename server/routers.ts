@@ -1282,6 +1282,17 @@ const maskingRouter = router({
     await db.deleteMaskingRule(input.id);
     return { success: true };
   }),
+  // Compile this API's response masking rules into a gateway policy and redeploy.
+  deployToGateway: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+    let result;
+    try {
+      result = await graviteeSync.deployApiMaskingToGateway(input.apiId);
+    } catch (err) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: graviteeErrorMessage(err, "Failed to deploy masking to the gateway") });
+    }
+    await db.createAuditEvent({ action: "masking.deployed", actionType: "update", targetType: "api", targetId: String(input.apiId), tenantId: ctx.tenantId, ...actor(ctx) });
+    return result;
+  }),
 });
 
 // ─── DCR Router (F-06) ──────────────────────────────────────────────────────

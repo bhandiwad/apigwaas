@@ -40,6 +40,13 @@ export default function DataMasking() {
     onSuccess: () => { refetch(); toast.success("Rule deleted"); },
   });
 
+  const { data: apis } = trpc.api.list.useQuery({});
+  const [deployApiId, setDeployApiId] = useState("");
+  const deployMasking = trpc.masking.deployToGateway.useMutation({
+    onSuccess: (r: any) => toast.success(`Masking deployed to gateway (${r.rules} rule${r.rules === 1 ? "" : "s"} enforced)`),
+    onError: (e) => toast.error(e.message),
+  });
+
   function resetForm() { setName(""); setJsonPath(""); setAction("partial"); setCategory("custom"); setPhase("both"); setReplacement(""); setShowLastN(4); }
 
   function applyPrebuilt(rule: typeof PREBUILT_RULES[0]) {
@@ -74,6 +81,20 @@ export default function DataMasking() {
         <div>
           <h1 className="text-2xl font-bold">Data Masking</h1>
           <p className="text-muted-foreground">Configure JSONPath-based data masking rules for API responses</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={deployApiId} onValueChange={setDeployApiId}>
+            <SelectTrigger className="w-52"><SelectValue placeholder="Enforce on API…" /></SelectTrigger>
+            <SelectContent>
+              {((apis as any[]) || []).map((a: any) => (
+                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" disabled={!deployApiId || deployMasking.isPending}
+            onClick={() => deployMasking.mutate({ apiId: Number(deployApiId) })}>
+            <Shield className="w-4 h-4 mr-2" />{deployMasking.isPending ? "Deploying…" : "Deploy to Gateway"}
+          </Button>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
