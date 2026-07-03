@@ -46,7 +46,6 @@ import {
   Rocket,
   Fingerprint,
   GitBranch,
-  Radio,
   Workflow,
   EyeOff,
 } from "lucide-react";
@@ -96,12 +95,9 @@ const menuSections: MenuSection[] = [
       { icon: Workflow, label: "API Designer", path: "/api-designer" },
       { icon: Workflow, label: "Policy Chains", path: "/policy-chains" },
       { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
-      { icon: Globe, label: "GeoIP Filtering", path: "/geoip-filtering" },
       { icon: Key, label: "Vault Secrets", path: "/vault-secrets" },
       { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
-      { icon: Radio, label: "Event Entrypoints", path: "/event-entrypoints" },
       { icon: GitBranch, label: "Environments", path: "/environments" },
-      { icon: Radio, label: "Kafka Reporter", path: "/kafka-reporter" },
     ],
   },
   {
@@ -132,7 +128,6 @@ const menuSections: MenuSection[] = [
       { icon: AlertTriangle, label: "Support", path: "/support" },
       { icon: Activity, label: "SRE Dashboard", path: "/sre" },
       { icon: Building2, label: "Tenant Lifecycle", path: "/tenant-lifecycle" },
-      { icon: CreditCard, label: "Payment Methods", path: "/payment-methods" },
     ],
   },
 ];
