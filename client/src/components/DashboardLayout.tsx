@@ -101,19 +101,12 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
-    title: "IDENTITY",
-    items: [
-      { icon: Key, label: "DCR Clients", path: "/dcr-clients" },
-      { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
-      { icon: Bell, label: "Alerts", path: "/alerts" },
-    ],
-  },
-  {
     title: "OPERATIONS",
     items: [
       { icon: BarChart3, label: "Analytics", path: "/analytics" },
       { icon: Activity, label: "Metering", path: "/metering" },
       { icon: CreditCard, label: "Billing", path: "/billing" },
+      { icon: Bell, label: "Alerts", path: "/alerts" },
       { icon: FileText, label: "Audit Trail", path: "/audit" },
       { icon: FileText, label: "Logs", path: "/logs" },
     ],
@@ -123,6 +116,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: Users, label: "Roles & Access", path: "/rbac" },
       { icon: Shield, label: "Role Assignments", path: "/role-assignments" },
+      { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
       { icon: Key, label: "Compliance", path: "/compliance" },
       { icon: Server, label: "Status", path: "/status" },
       { icon: AlertTriangle, label: "Support", path: "/support" },

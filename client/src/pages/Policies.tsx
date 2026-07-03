@@ -24,6 +24,18 @@ export default function PoliciesPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: "", apiId: "", type: "rate_limit" as const, phase: "both" as const });
 
+  // IP / CIDR access control — enforced at the gateway via the ip-filtering policy.
+  const [ipOpen, setIpOpen] = useState(false);
+  const [ipForm, setIpForm] = useState({ name: "", apiId: "", mode: "deny" as "allow" | "deny", ips: "" });
+  const createIpMutation = trpc.policy.create.useMutation({
+    onSuccess: () => { refetch(); setIpOpen(false); setIpForm({ name: "", apiId: "", mode: "deny", ips: "" }); toast.success("IP filter created — deploy it to enforce"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const deployIp = trpc.policy.deployIpFiltering.useMutation({
+    onSuccess: (r: any) => toast.success(`IP filtering enforced (${r.whitelist} allow, ${r.blacklist} deny)`),
+    onError: (e) => toast.error(e.message),
+  });
+
   const typeColors: Record<string, string> = {
     masking: "bg-purple-100 text-purple-700", rate_limit: "bg-amber-100 text-amber-700", geoip: "bg-blue-100 text-blue-700",
     vault_secret: "bg-emerald-100 text-emerald-700", cors: "bg-pink-100 text-pink-700", ip_filtering: "bg-orange-100 text-orange-700",
@@ -31,9 +43,13 @@ export default function PoliciesPage() {
   };
 
   const policyList = (policies as any[]) || [];
+  const ipPolicies = policyList.filter((p: any) => p.type === "ip_filtering");
+  const ipApiIds = Array.from(new Set(ipPolicies.map((p: any) => p.configuration?.apiId).filter((x: any) => x != null)));
+  const apiName = (id: number) => apiList.find((a: any) => a.id === id)?.name || `API ${id}`;
   const byApi: Record<string, any[]> = {};
   const noApi: any[] = [];
   policyList.forEach((p: any) => {
+    if (p.type === "ip_filtering") return; // shown in the dedicated IP section below
     if (p.apiId) {
       if (!byApi[p.apiId]) byApi[p.apiId] = [];
       byApi[p.apiId].push(p);
@@ -123,6 +139,75 @@ export default function PoliciesPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* IP / CIDR Access Control — enforced at the gateway */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="font-medium text-sm">IP / CIDR Access Control</span>
+            </div>
+            <Dialog open={ipOpen} onOpenChange={setIpOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />Add IP Rule</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle>Create IP/CIDR Filter</DialogTitle></DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div><Label>Rule Name</Label><Input value={ipForm.name} onChange={e => setIpForm({...ipForm, name: e.target.value})} placeholder="Office-only access" /></div>
+                  <div><Label>API</Label>
+                    <Select value={ipForm.apiId} onValueChange={v => setIpForm({...ipForm, apiId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select API to enforce on" /></SelectTrigger>
+                      <SelectContent>{apiList.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Mode</Label>
+                    <Select value={ipForm.mode} onValueChange={v => setIpForm({...ipForm, mode: v as any})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="allow">Allow list (only these IPs/CIDRs)</SelectItem>
+                        <SelectItem value="deny">Deny list (block these IPs/CIDRs)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>IPs / CIDRs (comma-separated)</Label><Input value={ipForm.ips} onChange={e => setIpForm({...ipForm, ips: e.target.value})} placeholder="10.0.0.0/8, 203.0.113.4" className="font-mono" /></div>
+                  <Button className="w-full" disabled={!ipForm.name || !ipForm.apiId || !ipForm.ips || createIpMutation.isPending}
+                    onClick={() => createIpMutation.mutate({ name: ipForm.name, type: "ip_filtering", configuration: { mode: ipForm.mode, ips: ipForm.ips.split(",").map(s => s.trim()).filter(Boolean), apiId: Number(ipForm.apiId) } })}>
+                    {createIpMutation.isPending ? "Creating..." : "Create IP Filter"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          {ipApiIds.length > 0 ? (
+            <div className="space-y-3">
+              {ipApiIds.map((aid: any) => (
+                <div key={aid} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">{apiName(aid)}</span>
+                    <Button size="sm" variant="outline" disabled={deployIp.isPending} onClick={() => deployIp.mutate({ apiId: aid })}>
+                      {deployIp.isPending ? "Deploying…" : "Deploy to Gateway"}
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {ipPolicies.filter((p: any) => p.configuration?.apiId === aid).map((p: any) => (
+                      <div key={p.id} className="flex items-center gap-2 text-xs">
+                        <Badge variant="outline" className={p.configuration?.mode === "allow" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}>{p.configuration?.mode === "allow" ? "ALLOW" : "DENY"}</Badge>
+                        <span className="font-medium">{p.name}</span>
+                        <span className="font-mono text-muted-foreground">{(p.configuration?.ips as string[])?.join(", ")}</span>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive h-6 w-6 p-0 ml-auto" onClick={() => setDeleteId(p.id)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No IP filters yet. Add an IP/CIDR rule and deploy it to enforce access control at the gateway.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="space-y-3">{[1,2,3].map(i => <Card key={i} className="animate-pulse h-16" />)}</div>
