@@ -17,6 +17,7 @@ import { ENV } from "./env";
 import { logger } from "./logger";
 import { register, httpRequestsTotal, httpRequestDurationMs } from "./metrics";
 import { startAnalyticsSync } from "../analyticsSync";
+import { startAlertEvaluator } from "../alertEvaluator";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -170,6 +171,7 @@ async function startServer() {
   server.listen(port, () => {
     logger.info({ port }, `Server running on http://localhost:${port}/`);
     startAnalyticsSync();
+    startAlertEvaluator();
   });
 }
 

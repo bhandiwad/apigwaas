@@ -144,7 +144,7 @@ export default function Alerts() {
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
                         Channels: {(alert.channels as string[])?.join(", ")}
-                        {alert.lastFiredAt && <span className="ml-2">• Last fired: {new Date(alert.lastFiredAt).toLocaleString()}</span>}
+                        {alert.lastTriggeredAt && <span className="ml-2">• Last fired: {new Date(alert.lastTriggeredAt).toLocaleString()}</span>}
                       </div>
                     </div>
                   </div>
