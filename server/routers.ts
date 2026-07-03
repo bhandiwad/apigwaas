@@ -528,6 +528,17 @@ const policyRouter = router({
     await db.createAuditEvent({ action: "policy.deleted", actionType: "delete", targetType: "policy", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
+  // Enforce this API's ip_filtering policies at the gateway (allow/deny by IP/CIDR).
+  deployIpFiltering: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+    let result;
+    try {
+      result = await graviteeSync.deployApiIpFilteringToGateway(input.apiId);
+    } catch (err) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: graviteeErrorMessage(err, "Failed to deploy IP filtering to the gateway") });
+    }
+    await db.createAuditEvent({ action: "ip_filtering.deployed", actionType: "update", targetType: "api", targetId: String(input.apiId), tenantId: ctx.tenantId, ...actor(ctx) });
+    return result;
+  }),
 });
 
 // ─── Audit Trail Router ──────────────────────────────────────────────────────

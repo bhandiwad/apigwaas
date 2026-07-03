@@ -440,6 +440,56 @@ export async function deployApiMaskingToGateway(apiId: number) {
   return { deployed: true, rules: rules.length };
 }
 
+// ─── Gateway Policy Enforcement (IP/CIDR filtering) ──────────────────────────
+
+const IP_FILTER_FLOW_NAME = "cloudinfinit-ip-filtering";
+
+// Compiles the tenant's ip_filtering policies scoped to this API into a Gravitee
+// `ip-filtering` request policy (allow -> whitelist, deny -> blacklist) and
+// redeploys, so IP/CIDR access control is enforced at the gateway.
+export async function deployApiIpFilteringToGateway(apiId: number) {
+  const status = await getConnectionStatus();
+  if (status.mode !== "live") throw new Error("Gravitee is not reachable — cannot deploy IP filtering to the gateway.");
+  const localApi = await db.getApiById(apiId);
+  if (!localApi) throw new Error("API not found");
+  const graviteeApiId = (localApi as any).graviteeApiId;
+  if (!graviteeApiId) throw new Error("Publish the API to the gateway before deploying IP filtering.");
+
+  const policies = (await db.getPoliciesByTenant((localApi as any).tenantId))
+    .filter((p: any) => p.type === "ip_filtering" && p.enabled !== false)
+    .filter((p: any) => { const c = p.configuration || {}; return c.apiId === apiId || c.apiId == null; });
+
+  const whitelistIps: string[] = [];
+  const blacklistIps: string[] = [];
+  for (const p of policies) {
+    const c = (p as any).configuration || {};
+    const ips: string[] = Array.isArray(c.ips) ? c.ips.filter(Boolean) : [];
+    if (c.mode === "allow") whitelistIps.push(...ips); else blacklistIps.push(...ips);
+  }
+
+  const api = await gravitee.getApi(graviteeApiId);
+  const existingFlows = ((api as any).flows || []).filter((f: any) => f.name !== IP_FILTER_FLOW_NAME);
+  let flows = existingFlows;
+  if (whitelistIps.length > 0 || blacklistIps.length > 0) {
+    flows = [...existingFlows, {
+      name: IP_FILTER_FLOW_NAME,
+      enabled: true,
+      selectors: [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }],
+      request: [{
+        name: "IP Filtering",
+        enabled: true,
+        policy: "ip-filtering",
+        configuration: { matchAllFromXForwardedFor: false, whitelistIps, blacklistIps },
+      }],
+      response: [],
+    }];
+  }
+
+  await gravitee.updateApi(graviteeApiId, { ...(api as any), flows });
+  await gravitee.deployApi(graviteeApiId);
+  return { deployed: true, whitelist: whitelistIps.length, blacklist: blacklistIps.length };
+}
+
 // ─── Gateway Instances Sync ──────────────────────────────────────────────────
 
 export async function getGatewayInstancesHybrid() {
