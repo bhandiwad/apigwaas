@@ -1057,11 +1057,27 @@ const gatewayRouter = router({
       try {
         const { instances } = await graviteeSync.getGatewayInstancesHybrid();
         return localClusters.map((c: any) => {
-          const matchingInstances = instances.filter(i =>
-            (i.tags || []).some((t: string) => (c.shardingTags || []).includes(t)) || i.tenant === c.region
-          );
+          const matchingInstances = instances.filter(i => {
+            const tagMatch = (i.tags || []).some((t: string) => (c.shardingTags || []).includes(t));
+            const tenantMatch = !!i.tenant && i.tenant === c.region;
+            // An untagged gateway reports to the DEFAULT environment; attribute it to DEFAULT-env clusters.
+            const defaultMatch = (!i.tags || i.tags.length === 0) && (c.graviteeEnvId || "DEFAULT") === "DEFAULT";
+            return tagMatch || tenantMatch || defaultMatch;
+          });
+          const started = matchingInstances.filter(i => i.state === "STARTED");
+          // Health reflects nodes actually serving traffic; stale stopped instances don't count.
+          const liveStatus = started.length > 0 ? "healthy" : "offline";
           return {
             ...c,
+            // Derive health from the live gateway, not the static DB columns.
+            status: liveStatus,
+            nodeCount: started.length,
+            stoppedNodeCount: matchingInstances.length - started.length,
+            gatewayVersion: (started[0] || matchingInstances[0])?.version ?? null,
+            // We don't collect per-node CPU/RPS from the gateway yet — don't show fabricated numbers.
+            cpuUsagePercent: null,
+            memoryUsagePercent: null,
+            requestsPerSecond: null,
             liveNodeCount: matchingInstances.length,
             liveInstances: matchingInstances.slice(0, 5),
             syncSource: "gravitee" as const,
@@ -1069,7 +1085,8 @@ const gatewayRouter = router({
         });
       } catch { /* fallback */ }
     }
-    return localClusters.map((c: any) => ({ ...c, syncSource: "local" as const }));
+    // Gravitee unreachable: registry rows only, health unknown (don't imply live health).
+    return localClusters.map((c: any) => ({ ...c, status: "unknown", syncSource: "local" as const }));
   }),
   createCluster: protectedProcedure.input(z.object({
     name: z.string().min(1),

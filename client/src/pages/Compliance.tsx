@@ -74,15 +74,11 @@ export default function CompliancePage() {
   const typeLabels: Record<string, string> = { soc2: "SOC 2 Type II", iso27001: "ISO 27001", rbi_cscrf: "RBI CSCRF", dpdp: "DPDP", pentest: "Penetration Test", sub_processor: "Sub-Processor List", sla_report: "SLA Report" };
   const typeColors: Record<string, string> = { soc2: "bg-blue-100 text-blue-700", iso27001: "bg-emerald-100 text-emerald-700", rbi_cscrf: "bg-purple-100 text-purple-700", dpdp: "bg-amber-100 text-amber-700", pentest: "bg-red-100 text-red-700", sub_processor: "bg-gray-100 text-gray-700", sla_report: "bg-teal-100 text-teal-700" };
   const keyStatusColors: Record<string, string> = { active: "bg-emerald-100 text-emerald-700", rotating: "bg-amber-100 text-amber-700", revoked: "bg-red-100 text-red-700" };
-  const certStatusColors: Record<string, string> = { certified: "bg-emerald-100 text-emerald-700", in_progress: "bg-amber-100 text-amber-700", compliant: "bg-blue-100 text-blue-700" };
-  const certStatusLabels: Record<string, string> = { certified: "Certified", in_progress: "In Progress", compliant: "Compliant" };
 
-  const certifications = [
-    { name: "SOC 2 Type II", status: "certified", date: "2025-12-15" },
-    { name: "ISO 27001:2022", status: "certified", date: "2025-11-20" },
-    { name: "RBI CSCRF", status: "in_progress", date: "2026-Q3 Target" },
-    { name: "DPDP Act 2023", status: "compliant", date: "2026-01-10" },
-  ];
+  // Certifications are derived from real uploaded artifacts of a certification/attestation nature —
+  // never hardcoded. Types that represent an external cert or attestation:
+  const CERT_ARTIFACT_TYPES = ["soc2", "iso27001", "rbi_cscrf", "dpdp"];
+  const certArtifacts = artifactList.filter((a: any) => CERT_ARTIFACT_TYPES.includes(a.type));
 
   const overdueCount = requests.filter((r: any) => r.isOverdue).length;
   const pendingCount = requests.filter((r: any) => r.status === "pending" || r.status === "in_progress").length;
@@ -116,27 +112,41 @@ export default function CompliancePage() {
         </div>
       )}
 
-      {/* Certifications */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {certifications.map((cert) => (
-          <Card key={cert.name} className="border border-border/60">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Shield className="h-4 w-4 text-primary" />
+      {/* Certifications — derived from real uploaded artifacts, never hardcoded */}
+      {certArtifacts.length === 0 ? (
+        <Card className="border border-dashed border-border/60">
+          <CardContent className="p-5 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">No certifications on file</h3>
+              <p className="text-xs text-muted-foreground">Upload attestation documents under Compliance Artifacts to display them here.</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {certArtifacts.map((cert: any) => (
+            <Card key={cert.id} className="border border-border/60">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Shield className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm">{cert.name}</h3>
+                      {cert.version && <p className="text-xs text-muted-foreground">v{cert.version}</p>}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-sm">{cert.name}</h3>
-                    <p className="text-xs text-muted-foreground">{cert.date}</p>
-                  </div>
+                  <Badge variant="secondary" className={typeColors[cert.type] || ""}>{typeLabels[cert.type] || cert.type}</Badge>
                 </div>
-                <Badge variant="secondary" className={certStatusColors[cert.status]}>{certStatusLabels[cert.status]}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* DPDP Request Tracker */}
       <Card className="border border-border/60">
@@ -432,7 +442,11 @@ export default function CompliancePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className={typeColors[a.type] || ""}>{typeLabels[a.type] || a.type}</Badge>
-                      <Button size="sm" variant="ghost" onClick={() => { if (a.fileUrl) window.open(a.fileUrl, "_blank"); else toast.info("No file attached"); }}><Download className="h-3 w-3" /></Button>
+                      {(a.fileUrl || a.url) ? (
+                        <Button size="sm" variant="ghost" title="Download" onClick={() => window.open(a.fileUrl || a.url, "_blank")}><Download className="h-3 w-3" /></Button>
+                      ) : (
+                        <Button size="sm" variant="ghost" disabled title="No file attached"><Download className="h-3 w-3 opacity-40" /></Button>
+                      )}
                     </div>
                   </div>
                 ))}

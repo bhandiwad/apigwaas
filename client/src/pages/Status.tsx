@@ -27,22 +27,24 @@ export default function StatusPage() {
   const regions = clusterList.map((c: any) => ({
     id: c.id,
     name: `${c.name} (${c.region})`,
-    status: c.status === "healthy" ? "operational" : c.status === "degraded" ? "degraded" : "outage",
+    status: c.status === "healthy" ? "operational" : c.status === "offline" ? "outage" : "degraded",
     tier: c.tier,
     graviteeEnvId: c.graviteeEnvId,
     nodeCount: c.nodeCount,
     cpuUsagePercent: c.cpuUsagePercent,
   }));
 
-  // Services: Gravitee connection status from real health check + incident-derived state
+  // Services derived from real signals only — no hardcoded "operational".
+  // Rate limiting (Redis) and analytics (Elasticsearch) are Gravitee-stack dependencies,
+  // so their health tracks the gateway runtime / management connection.
   const graviteeConnected = (gatewayStatus as any)?.connected ?? false;
+  const gatewayUp = clusterList.some((c: any) => c.status === "healthy");
   const services = [
     { name: "Gravitee Management API", status: graviteeConnected ? "operational" : "outage" },
-    { name: "API Gateway Runtime", status: clusterList.some((c: any) => c.status === "healthy") ? "operational" : clusterList.length === 0 ? "outage" : "degraded" },
+    { name: "API Gateway Runtime", status: gatewayUp ? "operational" : clusterList.length === 0 ? "outage" : "degraded" },
     { name: "Authentication Service", status: activeIncidents.some((i: any) => i.title?.toLowerCase().includes("auth")) ? "degraded" : "operational" },
-    { name: "Rate Limiter", status: "operational" },
-    { name: "Analytics Pipeline", status: "operational" },
-    { name: "Billing Service", status: "operational" },
+    { name: "Rate Limiting (Redis)", status: gatewayUp ? "operational" : "degraded" },
+    { name: "Analytics (Elasticsearch)", status: graviteeConnected ? "operational" : "degraded" },
   ];
 
   const overallStatus = activeIncidents.some(i => i.severity === "critical") ? "outage" : activeIncidents.length > 0 ? "degraded" : "operational";

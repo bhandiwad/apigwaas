@@ -7,9 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Server, Plus, Activity, Cpu, HardDrive, Zap, Globe } from "lucide-react";
+import { Server, Plus, Globe } from "lucide-react";
 
 export default function GatewayClusters() {
   const [open, setOpen] = useState(false);
@@ -27,7 +26,6 @@ export default function GatewayClusters() {
   const createCluster = trpc.gateway.createCluster.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("Cluster created"); resetForm(); },
   });
-  const updateCluster = trpc.gateway.updateCluster.useMutation({ onSuccess: () => refetch() });
 
   function resetForm() { setName(""); setDescription(""); setRegion("ap-south-1"); setTier("shared"); setMaxNodes(10); setGraviteeEnvId("DEFAULT"); setGraviteeOrgId("DEFAULT"); setManagementUrl(""); }
 
@@ -126,12 +124,14 @@ export default function GatewayClusters() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-gray-50 rounded-lg p-2">
-                  <div className="text-xs text-muted-foreground">Nodes</div>
-                  <div className="font-semibold text-amber-600">{cluster.nodeCount}/{cluster.maxNodes}</div>
+                  <div className="text-xs text-muted-foreground">Live Nodes</div>
+                  <div className="font-semibold text-amber-600">{cluster.nodeCount ?? 0}/{cluster.maxNodes}</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2">
-                  <div className="text-xs text-muted-foreground">RPS</div>
-                  <div className="font-semibold text-green-600">{cluster.requestsPerSecond?.toLocaleString() || 0}</div>
+                  <div className="text-xs text-muted-foreground">Gateway</div>
+                  <div className="font-semibold text-blue-600 truncate" title={cluster.gatewayVersion || ""}>
+                    {cluster.gatewayVersion ? `v${String(cluster.gatewayVersion).split(" ")[0]}` : "—"}
+                  </div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2">
                   <div className="text-xs text-muted-foreground">Tags</div>
@@ -139,33 +139,26 @@ export default function GatewayClusters() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1"><Cpu className="w-3 h-3" />CPU</span>
-                  <span>{cluster.cpuUsagePercent}%</span>
-                </div>
-                <Progress value={cluster.cpuUsagePercent || 0} className="h-2" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1"><HardDrive className="w-3 h-3" />Memory</span>
-                  <span>{cluster.memoryUsagePercent}%</span>
-                </div>
-                <Progress value={cluster.memoryUsagePercent || 0} className="h-2" />
-              </div>
+              {cluster.stoppedNodeCount > 0 && (
+                <div className="text-xs text-amber-600">{cluster.stoppedNodeCount} stopped node{cluster.stoppedNodeCount > 1 ? "s" : ""} still reporting</div>
+              )}
 
-              <div className="flex gap-2 pt-2">
-                {cluster.status === "provisioning" && (
-                  <Button size="sm" variant="outline" onClick={() => updateCluster.mutate({ id: cluster.id, status: "healthy", nodeCount: 3 })}>
-                    <Activity className="w-3 h-3 mr-1" />Mark Healthy
-                  </Button>
-                )}
-                {cluster.status === "healthy" && (
-                  <Button size="sm" variant="outline" onClick={() => updateCluster.mutate({ id: cluster.id, nodeCount: (cluster.nodeCount || 0) + 1 })}>
-                    <Zap className="w-3 h-3 mr-1" />Scale Up
-                  </Button>
-                )}
-              </div>
+              {/* Live gateway instances reported by Gravitee */}
+              {cluster.liveInstances?.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Live Instances</div>
+                  {cluster.liveInstances.map((inst: any) => (
+                    <div key={inst.id} className="flex items-center justify-between text-xs border rounded px-2 py-1">
+                      <span className="font-mono truncate">{inst.hostname || inst.id}</span>
+                      <Badge className={inst.state === "STARTED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}>{inst.state}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : cluster.syncSource === "gravitee" ? (
+                <div className="text-xs text-muted-foreground">No live gateway nodes reporting to this cluster.</div>
+              ) : (
+                <div className="text-xs text-muted-foreground">Gateway unreachable — live node status unavailable.</div>
+              )}
             </CardContent>
           </Card>
         ))}

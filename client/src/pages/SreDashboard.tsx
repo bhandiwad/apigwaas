@@ -17,9 +17,17 @@ export default function SreDashboardPage() {
 
   const activeIncidents = incidentList.filter((i: any) => i.status !== "resolved");
 
-  const availability = activeIncidents.length === 0 ? 99.99 : activeIncidents.some((i: any) => i.severity === "critical") ? 98.5 : 99.7;
-  const errorRate = activeIncidents.length * 0.02;
-  const totalRequests = meteringEvents.reduce((s: number, e: any) => s + (e.quantity || 0), 0);
+  // Real traffic: each metering row is one recorded gateway request (max 1000 recent).
+  const totalRequests = meteringEvents.length;
+  const errorRequests = meteringEvents.filter((e: any) => (e.statusCode ?? 0) >= 500).length;
+  const errorRate = totalRequests > 0 ? (errorRequests / totalRequests) * 100 : null;
+
+  // Gateway health from live cluster node counts. We do not track historical uptime,
+  // so there is no real 30-day availability SLO to show — report live node health instead.
+  const liveNodes = clusterList.reduce((s: number, c: any) => s + (c.nodeCount ?? 0), 0);
+  const stoppedNodes = clusterList.reduce((s: number, c: any) => s + (c.stoppedNodeCount ?? 0), 0);
+  const totalNodes = liveNodes + stoppedNodes;
+  const nodeHealth = totalNodes > 0 ? (liveNodes / totalNodes) * 100 : null;
 
   return (
     <div className="space-y-6">
@@ -34,9 +42,18 @@ export default function SreDashboardPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase">Availability</p>
-                <p className={`text-2xl font-bold mt-1 ${availability >= 99.9 ? "text-emerald-600" : "text-amber-600"}`}>{availability}%</p>
-                <p className="text-xs text-muted-foreground">30-day rolling</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase">Gateway Health</p>
+                {nodeHealth === null ? (
+                  <>
+                    <p className="text-2xl font-bold mt-1 text-muted-foreground">—</p>
+                    <p className="text-xs text-muted-foreground">Not measured</p>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-2xl font-bold mt-1 ${nodeHealth >= 99.9 ? "text-emerald-600" : "text-amber-600"}`}>{nodeHealth.toFixed(1)}%</p>
+                    <p className="text-xs text-muted-foreground">{liveNodes}/{totalNodes} nodes live</p>
+                  </>
+                )}
               </div>
               <Activity className="h-6 w-6 text-emerald-500 opacity-50" />
             </div>
@@ -59,8 +76,17 @@ export default function SreDashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase">Error Rate</p>
-                <p className={`text-2xl font-bold mt-1 ${errorRate < 0.1 ? "text-emerald-600" : "text-amber-600"}`}>{errorRate.toFixed(2)}%</p>
-                <p className="text-xs text-muted-foreground">5xx responses</p>
+                {errorRate === null ? (
+                  <>
+                    <p className="text-2xl font-bold mt-1 text-muted-foreground">—</p>
+                    <p className="text-xs text-muted-foreground">No traffic data</p>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-2xl font-bold mt-1 ${errorRate < 0.1 ? "text-emerald-600" : "text-amber-600"}`}>{errorRate.toFixed(2)}%</p>
+                    <p className="text-xs text-muted-foreground">5xx responses ({errorRequests} of {totalRequests})</p>
+                  </>
+                )}
               </div>
               <AlertTriangle className="h-6 w-6 text-amber-500 opacity-50" />
             </div>
@@ -104,11 +130,12 @@ export default function SreDashboardPage() {
                         <Badge variant="secondary" className="ml-auto text-xs">{c.region}</Badge>
                       </div>
                       <div className="space-y-1 text-xs">
-                        <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="font-medium capitalize">{c.type}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Nodes</span><span className="font-medium">{c.nodeCount ?? "—"}</span></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Status</span>
-                          <span className={c.status === "active" ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>{c.status}</span>
+                          <span className={`font-medium ${c.status === "healthy" ? "text-emerald-600" : c.status === "offline" ? "text-red-600" : "text-amber-600"}`}>{c.status ?? "unknown"}</span>
                         </div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Live nodes</span><span className="font-medium">{c.nodeCount ?? "—"}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Stopped nodes</span><span className="font-medium">{c.stoppedNodeCount ?? "—"}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span className="font-medium">{c.gatewayVersion ?? "—"}</span></div>
                       </div>
                     </div>
                   ))}
