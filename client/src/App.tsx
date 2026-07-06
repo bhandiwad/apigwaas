@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import TenantsPage from "./pages/Tenants";
 import WorkspacesPage from "./pages/Workspaces";
 import ApisPage from "./pages/Apis";
+import ApiCreateWizard from "./pages/ApiCreateWizard";
 import ApiDetailPage from "./pages/ApiDetail";
 import PlansPage from "./pages/Plans";
 import ConsumerAppsPage from "./pages/ConsumerApps";
@@ -69,6 +70,7 @@ function Router() {
         <Route path="/tenant-lifecycle" component={TenantLifecyclePage} />
         <Route path="/workspaces" component={WorkspacesPage} />
         <Route path="/apis" component={ApisPage} />
+        <Route path="/apis/new" component={ApiCreateWizard} />
         <Route path="/apis/:id" component={ApiDetailPage} />
         <Route path="/plans" component={PlansPage} />
         <Route path="/consumer-apps" component={ConsumerAppsPage} />

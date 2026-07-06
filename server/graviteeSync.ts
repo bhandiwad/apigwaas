@@ -300,8 +300,14 @@ export async function deleteApiHybrid(apiId: number) {
     const localApi = await db.getApiById(apiId);
     const graviteeApiId = (localApi as any)?.graviteeApiId;
     if (graviteeApiId) {
-      // Gravitee requires an API to be stopped before it can be deleted.
+      // Gravitee requires an API to be stopped, and its plans closed, before deletion.
       try { await gravitee.stopApi(graviteeApiId); } catch { /* already stopped */ }
+      try {
+        const plans = await gravitee.listPlans(graviteeApiId, { status: "PUBLISHED" });
+        for (const plan of plans.data) {
+          try { await gravitee.closePlan(graviteeApiId, plan.id); } catch { /* already closed */ }
+        }
+      } catch { /* no plans / listing failed — attempt delete anyway */ }
       try {
         await gravitee.deleteApi(graviteeApiId);
       } catch (err: any) {

@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Globe, Plus, Search, Upload, FileJson, ChevronRight } from "lucide-react";
 import { useState } from "react";
@@ -23,10 +22,6 @@ export default function ApisPage() {
   const { workspaceId: ctxWorkspaceId, effectiveTenantId, workspaces: workspaceList } = useTenantContext();
   const wsFilter = ctxWorkspaceId ?? qsWorkspaceId;
   const { data: apis, isLoading, refetch } = trpc.api.list.useQuery({ workspaceId: wsFilter ?? undefined, tenantId: effectiveTenantId });
-  const createMutation = trpc.api.create.useMutation({
-    onSuccess: () => { refetch(); setOpen(false); toast.success("API created"); },
-    onError: (e) => toast.error(e.message),
-  });
   const importMutation = trpc.api.importOpenApi.useMutation({
     onSuccess: (r: any) => {
       refetch(); setImportOpen(false); setImportSpec(""); setImportUrl("");
@@ -34,12 +29,10 @@ export default function ApisPage() {
     },
     onError: (e) => toast.error(e.message),
   });
-  const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importMode, setImportMode] = useState<"file" | "url">("file");
   const [importUrl, setImportUrl] = useState("");
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ name: "", version: "1.0.0", protocol: "rest" as const, backendUrl: "", contextPath: "", description: "", workspaceId: qsWorkspaceId ? String(qsWorkspaceId) : "" });
   const [importSpec, setImportSpec] = useState("");
 
   const filtered = (apis ?? []).filter((a) => a.name.toLowerCase().includes(search.toLowerCase()));
@@ -128,54 +121,7 @@ export default function ApisPage() {
               </div>
             </DialogContent>
           </Dialog>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Create API</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Create New API</DialogTitle></DialogHeader>
-              <div className="space-y-4 mt-4">
-                <div><Label>API Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Payment Service API" /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Version</Label><Input value={form.version} onChange={e => setForm({...form, version: e.target.value})} /></div>
-                  <div><Label>Protocol</Label>
-                    <Select value={form.protocol} onValueChange={v => setForm({...form, protocol: v as any})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="rest">REST</SelectItem>
-                        <SelectItem value="graphql">GraphQL</SelectItem>
-                        <SelectItem value="grpc">gRPC</SelectItem>
-                        <SelectItem value="websocket">WebSocket</SelectItem>
-                        <SelectItem value="kafka">Kafka</SelectItem>
-                        <SelectItem value="mqtt">MQTT</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {workspaceList.length > 0 && (
-                  <div><Label>Workspace</Label>
-                    <Select value={form.workspaceId} onValueChange={v => setForm({...form, workspaceId: v})}>
-                      <SelectTrigger><SelectValue placeholder="Select workspace" /></SelectTrigger>
-                      <SelectContent>
-                        {workspaceList.map((ws: any) => (
-                          <SelectItem key={ws.id} value={String(ws.id)}>{ws.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div><Label>Backend URL</Label><Input value={form.backendUrl} onChange={e => setForm({...form, backendUrl: e.target.value})} placeholder="https://api.internal.svc/v1" /></div>
-                <div><Label>Context Path</Label><Input value={form.contextPath} onChange={e => setForm({...form, contextPath: e.target.value})} placeholder="/api/v1/payments" /></div>
-                <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={2} /></div>
-                <Button className="w-full" onClick={() => {
-                  const wsId = form.workspaceId ? parseInt(form.workspaceId) : workspaceList[0]?.id;
-                  createMutation.mutate({ workspaceId: wsId, name: form.name, version: form.version, protocol: form.protocol, backendUrl: form.backendUrl, contextPath: form.contextPath, description: form.description });
-                }} disabled={!form.name || createMutation.isPending}>
-                  {createMutation.isPending ? "Creating..." : "Create API"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button className="bg-primary text-primary-foreground" onClick={() => setLocation("/apis/new")}><Plus className="h-4 w-4 mr-2" />Create API</Button>
         </div>
       </div>
 

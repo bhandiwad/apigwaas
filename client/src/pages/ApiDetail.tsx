@@ -27,6 +27,8 @@ export default function ApiDetailPage() {
   const [editForm, setEditForm] = useState({ name: "", description: "", backendUrl: "", contextPath: "", version: "" });
   const [confirm, setConfirm] = useState<"publish" | "deprecate" | "retire" | null>(null);
   const [retireText, setRetireText] = useState("");
+  const justCreated = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("created") === "1";
+  const [showCreated, setShowCreated] = useState(justCreated);
 
   const { data: api, isLoading } = trpc.api.getById.useQuery({ id: apiId }, { enabled: apiId > 0 });
   const { data: policies } = trpc.policy.list.useQuery({});
@@ -154,6 +156,22 @@ export default function ApiDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {showCreated && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:bg-emerald-950/30 dark:border-emerald-900">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-emerald-800 dark:text-emerald-300">API created 🎉</p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-0.5">
+                Gateway URL:{" "}
+                <code className="font-mono">{`http://localhost:8082${(api as any).contextPath || ""}`}</code>
+              </p>
+              <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-1">Next: attach policies, test it, then publish.</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreated(false)}>Dismiss</Button>
+          </div>
+        </div>
+      )}
 
       <Tabs defaultValue="overview">
         <TabsList>

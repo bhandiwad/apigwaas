@@ -287,6 +287,20 @@ const apiRouter = router({
     await db.createAuditEvent({ action: "api.created", actionType: "create", targetType: "api", targetId: String(result.id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return result;
   }),
+  // Wizard step 1: is a context path free within the tenant?
+  checkContextPath: tenantProcedure.input(z.object({
+    contextPath: z.string(),
+    tenantId: z.number().optional(),
+    excludeApiId: z.number().optional(),
+  })).query(async ({ ctx, input }) => {
+    const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input.tenantId);
+    const norm = (p: string) => "/" + (p || "").trim().replace(/^\/+|\/+$/g, "");
+    const target = norm(input.contextPath);
+    if (target === "/") return { available: false, conflictName: null };
+    const apis = await db.getApisByTenant(tid);
+    const conflict = apis.find((a: any) => a.id !== input.excludeApiId && norm(a.contextPath || "") === target);
+    return { available: !conflict, conflictName: conflict ? (conflict as any).name : null };
+  }),
   // Native Gravitee OpenAPI/Swagger import — from pasted/uploaded content or a URL.
   importOpenApi: tenantWriteProcedure.input(z.object({
     workspaceId: z.number(),
