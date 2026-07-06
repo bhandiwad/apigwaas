@@ -34,6 +34,7 @@ import RoleAssignmentsPage from "./pages/RoleAssignments";
 // Gravitee API Management pages
 import GatewayClustersPage from "./pages/GatewayClusters";
 import DeploymentsPage from "./pages/Deployments";
+import DeployWizard from "./pages/DeployWizard";
 import DevPortalPage from "./pages/DevPortal";
 import DataMaskingPage from "./pages/DataMasking";
 import DcrClientsPage from "./pages/DcrClients";
@@ -92,6 +93,7 @@ function Router() {
         {/* Gravitee API Management */}
         <Route path="/gateway-clusters" component={GatewayClustersPage} />
         <Route path="/deployments" component={DeploymentsPage} />
+        <Route path="/deployments/new" component={DeployWizard} />
         <Route path="/dev-portal" component={DevPortalPage} />
         <Route path="/data-masking" component={DataMaskingPage} />
         <Route path="/dcr-clients" component={DcrClientsPage} />
