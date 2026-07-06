@@ -10,22 +10,19 @@ import { Link2, Plus, Search, Copy, Key, CheckCircle, XCircle, Ban, RefreshCw, C
 import { useState } from "react";
 import { toast } from "sonner";
 import { useTenantContext } from "@/contexts/TenantContext";
+import { useLocation } from "wouter";
 
 export default function SubscriptionsPage() {
+  const [, navigate] = useLocation();
   const { effectiveTenantId } = useTenantContext();
   const { data: subscriptions, isLoading, refetch } = trpc.subscription.list.useQuery({ tenantId: effectiveTenantId });
   const { data: consumerApps } = trpc.consumerApp.list.useQuery({ tenantId: effectiveTenantId });
   const { data: apis } = trpc.api.list.useQuery({});
-  const [selectedApiId, setSelectedApiId] = useState<number>(0);
-  const { data: plans } = trpc.plan.list.useQuery({ apiId: selectedApiId }, { enabled: selectedApiId > 0 });
 
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
   const [newSubKey, setNewSubKey] = useState<string | null>(null);
   const [selectedSub, setSelectedSub] = useState<any | null>(null);
 
-  const createMutation = trpc.subscription.create.useMutation({
-    onSuccess: (data) => { refetch(); setOpen(false); if ((data as any).apiKey) { setNewSubKey((data as any).apiKey); toast.success("Subscription created — API key generated"); } else { toast.success("Subscription created"); } },
-  });
   const approveMutation = trpc.subscription.approve.useMutation({
     onSuccess: (data) => { refetch(); if (data.apiKey) { setNewSubKey(data.apiKey); } toast.success("Subscription approved"); },
   });
@@ -39,11 +36,8 @@ export default function SubscriptionsPage() {
     onSuccess: (data) => { refetch(); setRotatedKey(data.apiKey ?? null); toast.success("API key rotated"); },
   });
 
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ consumerAppId: "", planId: "", apiId: "" });
 
-  const planList: any[] = (plans as any[]) || [];
   const appList: any[] = (consumerApps as any)?.data ?? (Array.isArray(consumerApps) ? consumerApps : []);
   const apiList: any[] = (apis as any[]) || [];
   const subList: any[] = (subscriptions as any)?.data ?? (Array.isArray(subscriptions) ? subscriptions : []);
@@ -65,38 +59,7 @@ export default function SubscriptionsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Subscriptions</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage consumer app subscriptions to API plans</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />New Subscription</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Create Subscription</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><Label>Consumer App</Label>
-                <Select value={form.consumerAppId} onValueChange={v => setForm({...form, consumerAppId: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select app" /></SelectTrigger>
-                  <SelectContent>{appList.map((app: any) => <SelectItem key={app.id} value={String(app.id)}>{app.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>API</Label>
-                <Select value={form.apiId} onValueChange={v => { setForm({...form, apiId: v, planId: ""}); setSelectedApiId(parseInt(v)); }}>
-                  <SelectTrigger><SelectValue placeholder="Select API" /></SelectTrigger>
-                  <SelectContent>{apiList.map((api: any) => <SelectItem key={api.id} value={String(api.id)}>{api.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Plan</Label>
-                <Select value={form.planId} onValueChange={v => setForm({...form, planId: v})} disabled={!form.apiId}>
-                  <SelectTrigger><SelectValue placeholder={form.apiId ? "Select plan" : "Select API first"} /></SelectTrigger>
-                  <SelectContent>{planList.map((plan: any) => <SelectItem key={plan.id} value={String(plan.id)}>{plan.name} — {plan.rateLimit}/{plan.rateLimitPeriod}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <Button className="w-full" onClick={() => {
-                if (!form.consumerAppId || !form.planId || !form.apiId) { toast.error("All fields required"); return; }
-                createMutation.mutate({ consumerAppId: parseInt(form.consumerAppId), planId: parseInt(form.planId), apiId: parseInt(form.apiId) });
-              }} disabled={createMutation.isPending}>{createMutation.isPending ? "Creating..." : "Create Subscription"}</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button className="bg-primary text-primary-foreground" onClick={() => navigate("/subscribe")}><Plus className="h-4 w-4 mr-2" />New Subscription</Button>
       </div>
 
       {/* Summary */}

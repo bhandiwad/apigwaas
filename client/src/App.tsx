@@ -15,6 +15,7 @@ import ApiDetailPage from "./pages/ApiDetail";
 import PlansPage from "./pages/Plans";
 import ConsumerAppsPage from "./pages/ConsumerApps";
 import SubscriptionsPage from "./pages/Subscriptions";
+import SubscribeWizard from "./pages/SubscribeWizard";
 import PoliciesPage from "./pages/Policies";
 import AnalyticsPage from "./pages/Analytics";
 import MeteringPage from "./pages/Metering";
@@ -73,6 +74,7 @@ function Router() {
         <Route path="/plans" component={PlansPage} />
         <Route path="/consumer-apps" component={ConsumerAppsPage} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
+        <Route path="/subscribe" component={SubscribeWizard} />
         <Route path="/policies" component={PoliciesPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/metering" component={MeteringPage} />
