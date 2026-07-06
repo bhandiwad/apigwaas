@@ -60,6 +60,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useTenantContext } from "@/contexts/TenantContext";
 
 type MenuSection = {
   title: string;
@@ -294,6 +295,34 @@ function OnboardingScreen() {
   );
 }
 
+// ─── Tenant + Workspace Switcher ──────────────────────────────────────────────
+function TenantSwitcher() {
+  const { tenantId, setTenantId, workspaceId, setWorkspaceId, tenants, workspaces, isAdmin } = useTenantContext();
+  const showTenant = isAdmin && tenants.length > 1;
+  const currentTenant = tenants.find(t => t.id === tenantId);
+  return (
+    <div className="flex items-center gap-2">
+      {showTenant ? (
+        <Select value={tenantId ? String(tenantId) : ""} onValueChange={v => setTenantId(Number(v))}>
+          <SelectTrigger className="h-8 w-[160px] text-xs"><SelectValue placeholder="Tenant" /></SelectTrigger>
+          <SelectContent>
+            {tenants.map(t => <SelectItem key={t.id} value={String(t.id)} className="text-xs">{t.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      ) : currentTenant ? (
+        <span className="hidden md:inline text-xs text-muted-foreground max-w-[160px] truncate" title={currentTenant.name}>{currentTenant.name}</span>
+      ) : null}
+      <Select value={workspaceId ? String(workspaceId) : "all"} onValueChange={v => setWorkspaceId(v === "all" ? null : Number(v))}>
+        <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="All workspaces" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all" className="text-xs">All workspaces</SelectItem>
+          {workspaces.map(w => <SelectItem key={w.id} value={String(w.id)} className="text-xs">{w.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 // ─── Gravitee Connection Status Badge ─────────────────────────────────────────
 function GraviteeStatusBadge() {
   const { data: status } = trpc.gateway.connectionStatus.useQuery(undefined, {
@@ -502,6 +531,7 @@ function DashboardLayoutContent({
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <TenantSwitcher />
             <GraviteeStatusBadge />
             <Bell className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" />
           </div>

@@ -9,11 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Zap, Plus, Copy, ChevronRight, Link2, Ban } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTenantContext } from "@/contexts/TenantContext";
 
 export default function ConsumerAppsPage() {
-  const { data: appsResult, isLoading, refetch } = trpc.consumerApp.list.useQuery(undefined);
+  const { effectiveTenantId, workspaces } = useTenantContext();
+  const { data: appsResult, isLoading, refetch } = trpc.consumerApp.list.useQuery({ tenantId: effectiveTenantId });
   const apps: any[] = (appsResult as any)?.data ?? (Array.isArray(appsResult) ? appsResult : []);
-  const { data: workspaces } = trpc.workspace.list.useQuery(undefined);
   const { data: subscriptions } = trpc.subscription.list.useQuery(undefined);
   const { data: apis } = trpc.api.list.useQuery({});
   const workspaceList = (workspaces as any[]) || [];

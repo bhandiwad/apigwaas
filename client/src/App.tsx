@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { TenantProvider } from "./contexts/TenantContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Home from "./pages/Home";
 import TenantsPage from "./pages/Tenants";
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/accept-invite" component={AcceptInvitePage} />
       <Route path="/portal" component={DeveloperPortalView} />
       <Route>
+        <TenantProvider>
         <DashboardLayout>
           <Switch>
             <Route path="/" component={Home} />
@@ -105,6 +107,7 @@ function Router() {
             <Route component={NotFound} />
           </Switch>
         </DashboardLayout>
+        </TenantProvider>
       </Route>
     </Switch>
   );

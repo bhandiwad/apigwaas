@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Globe, Shield, Activity, Code, Server, Clock, Plus, Pencil } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -24,6 +25,8 @@ export default function ApiDetailPage() {
   const [selectedPhase, setSelectedPhase] = useState<"request" | "response" | "connect">("request");
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", description: "", backendUrl: "", contextPath: "", version: "" });
+  const [confirm, setConfirm] = useState<"publish" | "deprecate" | "retire" | null>(null);
+  const [retireText, setRetireText] = useState("");
 
   const { data: api, isLoading } = trpc.api.getById.useQuery({ id: apiId }, { enabled: apiId > 0 });
   const { data: policies } = trpc.policy.list.useQuery({});
@@ -32,7 +35,7 @@ export default function ApiDetailPage() {
   const updateApi = trpc.api.update.useMutation({
     onSuccess: (_, vars) => {
       utils.api.getById.invalidate({ id: apiId });
-      toast.success(vars.status === "published" ? "API published" : vars.status === "deprecated" ? "API deprecated" : "API updated");
+      toast.success(vars.status === "published" ? "API published" : vars.status === "deprecated" ? "API deprecated" : vars.status === "retired" ? "API retired" : "API updated");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -108,22 +111,49 @@ export default function ApiDetailPage() {
             </Dialog>
           )}
           {(api as any).status === "draft" && (
-            <Button size="sm" disabled={updateApi.isPending} onClick={() => updateApi.mutate({ id: apiId, status: "published" })}>
-              {updateApi.isPending ? "Publishing..." : "Publish"}
-            </Button>
+            <Button size="sm" disabled={updateApi.isPending} onClick={() => setConfirm("publish")}>Publish</Button>
           )}
           {(api as any).status === "published" && (
-            <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => updateApi.mutate({ id: apiId, status: "deprecated" })}>
-              {updateApi.isPending ? "..." : "Deprecate"}
-            </Button>
+            <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => setConfirm("deprecate")}>Deprecate</Button>
           )}
           {(api as any).status === "deprecated" && (
-            <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => updateApi.mutate({ id: apiId, status: "published" })}>
-              {updateApi.isPending ? "..." : "Re-publish"}
-            </Button>
+            <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => setConfirm("publish")}>Re-publish</Button>
+          )}
+          {((api as any).status === "published" || (api as any).status === "deprecated") && (
+            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={updateApi.isPending} onClick={() => { setRetireText(""); setConfirm("retire"); }}>Retire</Button>
           )}
         </div>
       </div>
+
+      <AlertDialog open={confirm !== null} onOpenChange={o => { if (!o) setConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm === "publish" ? "Publish API" : confirm === "deprecate" ? "Deprecate API" : "Retire API"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "publish" && "This deploys the API to the gateway and makes it callable by consumers."}
+              {confirm === "deprecate" && "Consumers will be warned this API is deprecated. It stays callable until retired."}
+              {confirm === "retire" && <>This takes <span className="font-medium">{(api as any).name}</span> out of active use. Type its name to confirm.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirm === "retire" && (
+            <Input value={retireText} onChange={e => setRetireText(e.target.value)} placeholder={(api as any).name} className="font-mono" autoFocus />
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={updateApi.isPending || (confirm === "retire" && retireText !== (api as any).name)}
+              onClick={() => {
+                const status = confirm === "publish" ? "published" as const : confirm === "deprecate" ? "deprecated" as const : "retired" as const;
+                updateApi.mutate({ id: apiId, status });
+                setConfirm(null);
+              }}>
+              {confirm === "publish" ? "Publish" : confirm === "deprecate" ? "Deprecate" : "Retire"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Tabs defaultValue="overview">
         <TabsList>

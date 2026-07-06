@@ -11,6 +11,7 @@ import { Globe, Plus, Search, Upload, FileJson, ChevronRight } from "lucide-reac
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
+import { useTenantContext } from "@/contexts/TenantContext";
 
 export default function ApisPage() {
   const [, setLocation] = useLocation();
@@ -19,8 +20,9 @@ export default function ApisPage() {
   const qsWorkspaceId = qs ? Number(qs.get("workspaceId")) || undefined : undefined;
   const qsWorkspaceName = qs?.get("workspaceName") ?? null;
 
-  const { data: workspaces } = trpc.workspace.list.useQuery(undefined);
-  const { data: apis, isLoading, refetch } = trpc.api.list.useQuery({ workspaceId: qsWorkspaceId });
+  const { workspaceId: ctxWorkspaceId, effectiveTenantId, workspaces: workspaceList } = useTenantContext();
+  const wsFilter = ctxWorkspaceId ?? qsWorkspaceId;
+  const { data: apis, isLoading, refetch } = trpc.api.list.useQuery({ workspaceId: wsFilter ?? undefined, tenantId: effectiveTenantId });
   const createMutation = trpc.api.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); toast.success("API created"); },
     onError: (e) => toast.error(e.message),
@@ -40,8 +42,7 @@ export default function ApisPage() {
   const [form, setForm] = useState({ name: "", version: "1.0.0", protocol: "rest" as const, backendUrl: "", contextPath: "", description: "", workspaceId: qsWorkspaceId ? String(qsWorkspaceId) : "" });
   const [importSpec, setImportSpec] = useState("");
 
-  const workspaceList = (workspaces as any[]) || [];
-  const filtered = (apis as any[] || []).filter((a: any) => a.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = (apis ?? []).filter((a) => a.name.toLowerCase().includes(search.toLowerCase()));
   const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", published: "bg-emerald-100 text-emerald-700", deprecated: "bg-amber-100 text-amber-700", retired: "bg-red-100 text-red-700" };
   const protocolColors: Record<string, string> = { rest: "bg-blue-100 text-blue-700", graphql: "bg-pink-100 text-pink-700", grpc: "bg-purple-100 text-purple-700", websocket: "bg-orange-100 text-orange-700", kafka: "bg-teal-100 text-teal-700", mqtt: "bg-cyan-100 text-cyan-700" };
 

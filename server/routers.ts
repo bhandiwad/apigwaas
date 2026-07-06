@@ -217,8 +217,9 @@ const tenantRouter = router({
 
 // ─── Workspace Router ────────────────────────────────────────────────────────
 const workspaceRouter = router({
-  list: tenantProcedure.query(async ({ ctx }) => {
-    return db.getWorkspacesByTenant(ctx.tenantId);
+  list: tenantProcedure.input(z.object({ tenantId: z.number().optional() }).optional()).query(async ({ ctx, input }) => {
+    const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input?.tenantId);
+    return db.getWorkspacesByTenant(tid);
   }),
   listByTenant: protectedProcedure.input(z.object({ tenantId: z.number() })).query(async ({ ctx, input }) => {
     const tid = resolveEffectiveTenantId(ctx.user.role, ctx.user.tenantId ?? 0, input.tenantId);
@@ -258,8 +259,9 @@ const apiRouter = router({
   portalList: publicProcedure.query(async () => {
     return db.getPublishedApis();
   }),
-  list: tenantProcedure.input(z.object({ workspaceId: z.number().optional() })).query(async ({ ctx, input }) => {
-    return graviteeSync.listApisHybrid(ctx.tenantId, input.workspaceId);
+  list: tenantProcedure.input(z.object({ workspaceId: z.number().optional(), tenantId: z.number().optional() })).query(async ({ ctx, input }) => {
+    const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input.tenantId);
+    return graviteeSync.listApisHybrid(tid, input.workspaceId);
   }),
   getById: tenantProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     return db.getApiById(input.id);
@@ -330,7 +332,11 @@ const apiRouter = router({
     }
 
     await db.updateApi(id, data);
-    await db.createAuditEvent({ action: "api.updated", actionType: "update", targetType: "api", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
+    const action = data.status === "published" ? "api.published"
+      : data.status === "deprecated" ? "api.deprecated"
+      : data.status === "retired" ? "api.retired"
+      : "api.updated";
+    await db.createAuditEvent({ action, actionType: "update", targetType: "api", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
@@ -463,8 +469,9 @@ const planRouter = router({
 
 // ─── Consumer Apps Router ────────────────────────────────────────────────────
 const consumerAppRouter = router({
-  list: tenantProcedure.input(z.object({ page: z.number().default(1), perPage: z.number().default(100) }).optional()).query(async ({ ctx, input }) => {
-    return db.getConsumerAppsByTenant(ctx.tenantId, input ?? {});
+  list: tenantProcedure.input(z.object({ page: z.number().default(1), perPage: z.number().default(100), tenantId: z.number().optional() }).optional()).query(async ({ ctx, input }) => {
+    const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input?.tenantId);
+    return db.getConsumerAppsByTenant(tid, input ?? {});
   }),
   create: tenantWriteProcedure.input(z.object({
     workspaceId: z.number(),
@@ -491,8 +498,9 @@ const consumerAppRouter = router({
 
 // ─── Subscriptions Router ────────────────────────────────────────────────────
 const subscriptionRouter = router({
-  list: tenantProcedure.input(z.object({ page: z.number().default(1), perPage: z.number().default(100) }).optional()).query(async ({ ctx, input }) => {
-    const result = await db.getSubscriptionsByTenant(ctx.tenantId, input ?? {});
+  list: tenantProcedure.input(z.object({ page: z.number().default(1), perPage: z.number().default(100), tenantId: z.number().optional() }).optional()).query(async ({ ctx, input }) => {
+    const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input?.tenantId);
+    const result = await db.getSubscriptionsByTenant(tid, input ?? {});
     const status = await graviteeSync.getConnectionStatus();
     return { data: result.data.map((s: any) => ({ ...s, syncSource: status.mode })), total: result.total };
   }),

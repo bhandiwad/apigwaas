@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Link2, Plus, Search, Copy, Key, CheckCircle, XCircle, Ban, RefreshCw, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTenantContext } from "@/contexts/TenantContext";
 
 export default function SubscriptionsPage() {
-  const { data: subscriptions, isLoading, refetch } = trpc.subscription.list.useQuery(undefined);
-  const { data: consumerApps } = trpc.consumerApp.list.useQuery(undefined);
+  const { effectiveTenantId } = useTenantContext();
+  const { data: subscriptions, isLoading, refetch } = trpc.subscription.list.useQuery({ tenantId: effectiveTenantId });
+  const { data: consumerApps } = trpc.consumerApp.list.useQuery({ tenantId: effectiveTenantId });
   const { data: apis } = trpc.api.list.useQuery({});
   const [selectedApiId, setSelectedApiId] = useState<number>(0);
   const { data: plans } = trpc.plan.list.useQuery({ apiId: selectedApiId }, { enabled: selectedApiId > 0 });

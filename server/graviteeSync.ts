@@ -998,9 +998,15 @@ export async function publishApiHybrid(apiId: number): Promise<{ graviteeApiId: 
     }
   }
 
-  // Deploy to gateway, then start traffic
+  // Deploy to gateway, then start traffic. Starting is idempotent — re-publishing
+  // an API that's already running on the gateway must not fail.
   await gravitee.deployApi(graviteeApiId);
-  await gravitee.startApi(graviteeApiId);
+  try {
+    await gravitee.startApi(graviteeApiId);
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || err?.message || "";
+    if (!/already started/i.test(msg)) throw err;
+  }
 
   return { graviteeApiId, deployed: true };
 }
