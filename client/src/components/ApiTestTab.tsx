@@ -19,8 +19,10 @@ export function ApiTestTab({ apiId, api }: { apiId: number; api: any }) {
   const [headers, setHeaders] = useState("");
   const [body, setBody] = useState("");
   const [history, setHistory] = useState<CallResult[]>([]);
+  const { data: status } = trpc.gateway.connectionStatus.useQuery();
+  const gatewayBase = ((status as any)?.gatewayBaseUrl || "http://localhost:8082").replace(/\/$/, "");
   const contextPath = String(api?.contextPath || "").replace(/\/$/, "");
-  const gatewayUrl = `http://localhost:8082${contextPath}${path.startsWith("/") ? path : `/${path}`}`;
+  const gatewayUrl = `${gatewayBase}${contextPath}${path.startsWith("/") ? path : `/${path}`}`;
 
   const call = trpc.api.testCall.useMutation({
     onSuccess: (r: any) => {

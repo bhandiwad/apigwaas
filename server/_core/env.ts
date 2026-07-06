@@ -32,6 +32,8 @@ export const ENV = {
   graviteeApiPassword: process.env.GRAVITEE_API_PASSWORD ?? "",
   graviteeOrgId: process.env.GRAVITEE_ORG_ID ?? "DEFAULT",
   graviteeEnvId: process.env.GRAVITEE_ENV_ID ?? "DEFAULT",
+  // Base URL of the Gravitee gateway that serves API traffic (used by the test console).
+  graviteeGatewayUrl: process.env.GRAVITEE_GATEWAY_URL ?? "http://localhost:8082",
   appUrl: process.env.APP_URL ?? "",
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "").split(",").map(s => s.trim()).filter(Boolean),
   // Elasticsearch (Gravitee analytics backend)

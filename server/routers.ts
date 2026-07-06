@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, tenantProcedure, adminProcedure, tenantAdminProcedure, tenantWriteProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { logger } from "./_core/logger";
+import { ENV } from "./_core/env";
 import { validateBackendUrl, validateContextPath } from "./_core/validation";
 import { z } from "zod";
 import * as db from "./db";
@@ -449,7 +450,7 @@ const apiRouter = router({
     const connStatus = await graviteeSync.getConnectionStatus();
     const contextPath = String((api as any).contextPath || "").replace(/\/$/, "");
     const pathPart = input.path.startsWith("/") ? input.path : `/${input.path}`;
-    const url = `http://localhost:8082${contextPath}${pathPart}`;
+    const url = `${ENV.graviteeGatewayUrl.replace(/\/$/, "")}${contextPath}${pathPart}`;
     if (connStatus.mode !== "live") {
       return { simulated: true, status: 200, statusText: "OK (simulated)", latencyMs: 1, headers: { "x-simulated": "true" },
         body: JSON.stringify({ note: "simulated — connect Gravitee for live calls", method: input.method, url }, null, 2), url };
@@ -1282,7 +1283,7 @@ const gatewayRouter = router({
     return graviteeSync.getGatewayInstancesHybrid();
   }),
   connectionStatus: protectedProcedure.query(async () => {
-    return graviteeSync.getConnectionStatus();
+    return { ...(await graviteeSync.getConnectionStatus()), gatewayBaseUrl: ENV.graviteeGatewayUrl };
   }),
   startApi: tenantProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
     const api = await db.getApiById(input.apiId);

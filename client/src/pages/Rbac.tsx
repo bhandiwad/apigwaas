@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Plus, Shield } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import RoleAssignmentsPage from "./RoleAssignments";
 
 export default function RbacPage() {
   const { data: roles, isLoading, refetch } = trpc.rbac.roles.useQuery(undefined);
@@ -48,6 +50,12 @@ export default function RbacPage() {
         </Dialog>
       </div>
 
+      <Tabs defaultValue="roles" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="roles">Roles</TabsTrigger>
+          <TabsTrigger value="assignments">Assignments</TabsTrigger>
+        </TabsList>
+        <TabsContent value="roles" className="space-y-6">
       {/* Permission Matrix */}
       <Card className="border border-border/60">
         <CardHeader className="pb-3"><CardTitle className="text-base">Permission Matrix</CardTitle></CardHeader>
@@ -99,6 +107,11 @@ export default function RbacPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+        <TabsContent value="assignments">
+          <RoleAssignmentsPage />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

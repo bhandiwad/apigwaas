@@ -15,10 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Rocket, FileJson, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
-// Gateway host that serves API traffic (Gravitee gateway). Illustrative in the
-// right-rail preview; the real host comes from the deployed cluster.
-const GATEWAY_BASE = "http://localhost:8082";
-
 type PlanKey = "keyless" | "apikey" | "jwt" | "oauth2";
 const PLANS: { key: PlanKey; label: string; desc: string; enabled: boolean; note?: string }[] = [
   { key: "keyless", label: "Keyless", desc: "Open access, no credentials. For public or internal APIs.", enabled: true },
@@ -39,6 +35,7 @@ export default function ApiCreateWizard() {
   const { workspaceId: ctxWorkspaceId, effectiveTenantId, workspaces } = useTenantContext();
   const { data: status } = trpc.gateway.connectionStatus.useQuery();
   const isLive = (status as any)?.mode === "live";
+  const GATEWAY_BASE = ((status as any)?.gatewayBaseUrl || "http://localhost:8082").replace(/\/$/, "");
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({

@@ -132,7 +132,6 @@ const menuSections: MenuSection[] = [
       { icon: CreditCard, label: "Billing", path: "/billing" },
       { icon: Key, label: "Compliance", path: "/compliance" },
       { icon: Users, label: "Roles & Access", path: "/rbac" },
-      { icon: Shield, label: "Role Assignments", path: "/role-assignments" },
       { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
       { icon: Server, label: "Status", path: "/status" },
       { icon: Activity, label: "SRE Dashboard", path: "/sre" },

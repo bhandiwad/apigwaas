@@ -64,17 +64,17 @@ export default function ApiDetailPage() {
         <Button variant="ghost" size="sm" onClick={() => setLocation("/apis")}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">{(api as any).name}</h1>
-            <Badge variant="secondary" className={statusColors[(api as any).status] || ""}>{(api as any).status}</Badge>
-            <Badge variant="secondary" className={protocolColors[(api as any).protocol] || ""}>{(api as any).protocol?.toUpperCase()}</Badge>
+            <h1 className="text-2xl font-bold tracking-tight">{api.name}</h1>
+            <Badge variant="secondary" className={statusColors[api.status] || ""}>{api.status}</Badge>
+            <Badge variant="secondary" className={protocolColors[api.protocol] || ""}>{api.protocol?.toUpperCase()}</Badge>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">{(api as any).description || "No description"}</p>
+          <p className="text-muted-foreground text-sm mt-1">{api.description || "No description"}</p>
         </div>
         <div className="flex gap-2">
-          {(api as any).status !== "retired" && (
+          {api.status !== "retired" && (
             <Dialog open={editOpen} onOpenChange={(o) => {
               setEditOpen(o);
-              if (o) setEditForm({ name: (api as any).name || "", description: (api as any).description || "", backendUrl: (api as any).backendUrl || "", contextPath: (api as any).contextPath || "", version: (api as any).version || "" });
+              if (o) setEditForm({ name: api.name || "", description: api.description || "", backendUrl: api.backendUrl || "", contextPath: api.contextPath || "", version: api.version || "" });
             }}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline"><Pencil className="h-3 w-3 mr-1" />Edit</Button>
@@ -100,16 +100,16 @@ export default function ApiDetailPage() {
               </DialogContent>
             </Dialog>
           )}
-          {(api as any).status === "draft" && (
+          {api.status === "draft" && (
             <Button size="sm" disabled={updateApi.isPending} onClick={() => setConfirm("publish")}>Publish</Button>
           )}
-          {(api as any).status === "published" && (
+          {api.status === "published" && (
             <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => setConfirm("deprecate")}>Deprecate</Button>
           )}
-          {(api as any).status === "deprecated" && (
+          {api.status === "deprecated" && (
             <Button size="sm" variant="outline" disabled={updateApi.isPending} onClick={() => setConfirm("publish")}>Re-publish</Button>
           )}
-          {((api as any).status === "published" || (api as any).status === "deprecated") && (
+          {(api.status === "published" || api.status === "deprecated") && (
             <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={updateApi.isPending} onClick={() => { setRetireText(""); setConfirm("retire"); }}>Retire</Button>
           )}
         </div>
@@ -124,16 +124,16 @@ export default function ApiDetailPage() {
             <AlertDialogDescription>
               {confirm === "publish" && "This deploys the API to the gateway and makes it callable by consumers."}
               {confirm === "deprecate" && "Consumers will be warned this API is deprecated. It stays callable until retired."}
-              {confirm === "retire" && <>This takes <span className="font-medium">{(api as any).name}</span> out of active use. Type its name to confirm.</>}
+              {confirm === "retire" && <>This takes <span className="font-medium">{api.name}</span> out of active use. Type its name to confirm.</>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {confirm === "retire" && (
-            <Input value={retireText} onChange={e => setRetireText(e.target.value)} placeholder={(api as any).name} className="font-mono" autoFocus />
+            <Input value={retireText} onChange={e => setRetireText(e.target.value)} placeholder={api.name} className="font-mono" autoFocus />
           )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={updateApi.isPending || (confirm === "retire" && retireText !== (api as any).name)}
+              disabled={updateApi.isPending || (confirm === "retire" && retireText !== api.name)}
               onClick={() => {
                 const status = confirm === "publish" ? "published" as const : confirm === "deprecate" ? "deprecated" as const : "retired" as const;
                 updateApi.mutate({ id: apiId, status });
@@ -152,7 +152,7 @@ export default function ApiDetailPage() {
               <p className="font-medium text-emerald-800 dark:text-emerald-300">API created 🎉</p>
               <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-0.5">
                 Gateway URL:{" "}
-                <code className="font-mono">{`http://localhost:8082${(api as any).contextPath || ""}`}</code>
+                <code className="font-mono">{`http://localhost:8082${api.contextPath || ""}`}</code>
               </p>
               <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-1">Next: attach policies, test it, then publish.</p>
             </div>
@@ -179,19 +179,19 @@ export default function ApiDetailPage() {
             <Card className="border border-border/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2"><Server className="h-4 w-4 text-primary" /><span className="text-sm font-medium">Backend</span></div>
-                <p className="text-xs text-muted-foreground break-all">{(api as any).backendUrl || "Not configured"}</p>
+                <p className="text-xs text-muted-foreground break-all">{api.backendUrl || "Not configured"}</p>
               </CardContent>
             </Card>
             <Card className="border border-border/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2"><Code className="h-4 w-4 text-primary" /><span className="text-sm font-medium">Context Path</span></div>
-                <p className="text-xs text-muted-foreground font-mono">{(api as any).contextPath || "/"}</p>
+                <p className="text-xs text-muted-foreground font-mono">{api.contextPath || "/"}</p>
               </CardContent>
             </Card>
             <Card className="border border-border/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2"><Clock className="h-4 w-4 text-primary" /><span className="text-sm font-medium">Version</span></div>
-                <p className="text-xs text-muted-foreground">v{(api as any).version}</p>
+                <p className="text-xs text-muted-foreground">v{api.version}</p>
               </CardContent>
             </Card>
           </div>
@@ -200,10 +200,10 @@ export default function ApiDetailPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">API Details</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Protocol:</span> <span className="font-medium">{(api as any).protocol}</span></div>
-                <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{(api as any).status}</span></div>
-                <div><span className="text-muted-foreground">Workspace ID:</span> <span className="font-medium">{(api as any).workspaceId}</span></div>
-                <div><span className="text-muted-foreground">Created:</span> <span className="font-medium">{(api as any).createdAt ? new Date((api as any).createdAt).toLocaleDateString() : "N/A"}</span></div>
+                <div><span className="text-muted-foreground">Protocol:</span> <span className="font-medium">{api.protocol}</span></div>
+                <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{api.status}</span></div>
+                <div><span className="text-muted-foreground">Workspace ID:</span> <span className="font-medium">{api.workspaceId}</span></div>
+                <div><span className="text-muted-foreground">Created:</span> <span className="font-medium">{api.createdAt ? new Date(api.createdAt).toLocaleDateString() : "N/A"}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -233,9 +233,9 @@ export default function ApiDetailPage() {
           <Card className="border border-border/60">
             <CardHeader className="pb-3"><CardTitle className="text-base">OpenAPI Specification</CardTitle></CardHeader>
             <CardContent>
-              {(api as any).openApiSpec ? (
+              {api.openApiSpec ? (
                 <pre className="bg-muted/50 p-4 rounded-lg text-xs font-mono overflow-auto max-h-96">
-                  {JSON.stringify((api as any).openApiSpec, null, 2)}
+                  {JSON.stringify(api.openApiSpec, null, 2)}
                 </pre>
               ) : (
                 <div className="text-center py-6">
