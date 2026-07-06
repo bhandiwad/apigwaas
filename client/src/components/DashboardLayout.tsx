@@ -24,6 +24,7 @@ import {
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
+  ChevronDown,
   LayoutDashboard,
   LogOut,
   PanelLeft,
@@ -64,12 +65,18 @@ import { useTenantContext } from "@/contexts/TenantContext";
 
 type MenuSection = {
   title: string;
+  defaultOpen: boolean;
   items: { icon: any; label: string; path: string }[];
 };
 
+// Consolidated navigation. API-scoped surfaces (Designer, Policy Chains,
+// Lifecycle) now live inside the API detail hub; advanced/secondary pages
+// (GitOps, Vault, Dev Portal, Status, Support, SRE, Tenant Lifecycle, Logs,
+// Role Assignments) remain reachable by URL but are off the primary sidebar.
 const menuSections: MenuSection[] = [
   {
     title: "MAIN",
+    defaultOpen: true,
     items: [
       { icon: LayoutDashboard, label: "Overview", path: "/" },
       { icon: Building2, label: "Tenants", path: "/tenants" },
@@ -77,52 +84,50 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
-    title: "API MANAGEMENT",
+    title: "APIS",
+    defaultOpen: true,
     items: [
       { icon: Globe, label: "APIs", path: "/apis" },
-      { icon: Activity, label: "API Lifecycle", path: "/api-lifecycle" },
       { icon: BookOpen, label: "Plans", path: "/plans" },
       { icon: Zap, label: "Consumer Apps", path: "/consumer-apps" },
       { icon: Key, label: "Subscriptions", path: "/subscriptions" },
-      { icon: Shield, label: "Policies", path: "/policies" },
     ],
   },
   {
     title: "GATEWAY",
+    defaultOpen: true,
     items: [
-      { icon: GitBranch, label: "GitOps Pipeline", path: "/gitops-pipeline" },
       { icon: Server, label: "Clusters", path: "/gateway-clusters" },
       { icon: Rocket, label: "Deployments", path: "/deployments" },
-      { icon: Workflow, label: "API Designer", path: "/api-designer" },
-      { icon: Workflow, label: "Policy Chains", path: "/policy-chains" },
-      { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
-      { icon: Key, label: "Vault Secrets", path: "/vault-secrets" },
-      { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
       { icon: GitBranch, label: "Environments", path: "/environments" },
     ],
   },
   {
-    title: "OPERATIONS",
+    title: "SECURITY",
+    defaultOpen: false,
+    items: [
+      { icon: Shield, label: "Policies", path: "/policies" },
+      { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
+      { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
+    ],
+  },
+  {
+    title: "OBSERVABILITY",
+    defaultOpen: false,
     items: [
       { icon: BarChart3, label: "Analytics", path: "/analytics" },
       { icon: Activity, label: "Metering", path: "/metering" },
-      { icon: CreditCard, label: "Billing", path: "/billing" },
       { icon: Bell, label: "Alerts", path: "/alerts" },
       { icon: FileText, label: "Audit Trail", path: "/audit" },
-      { icon: FileText, label: "Logs", path: "/logs" },
     ],
   },
   {
     title: "PLATFORM",
+    defaultOpen: false,
     items: [
-      { icon: Users, label: "Roles & Access", path: "/rbac" },
-      { icon: Shield, label: "Role Assignments", path: "/role-assignments" },
-      { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
+      { icon: CreditCard, label: "Billing", path: "/billing" },
       { icon: Key, label: "Compliance", path: "/compliance" },
-      { icon: Server, label: "Status", path: "/status" },
-      { icon: AlertTriangle, label: "Support", path: "/support" },
-      { icon: Activity, label: "SRE Dashboard", path: "/sre" },
-      { icon: Building2, label: "Tenant Lifecycle", path: "/tenant-lifecycle" },
+      { icon: Users, label: "Roles & Access", path: "/rbac" },
     ],
   },
 ];
@@ -372,6 +377,18 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = allMenuItems.find((item) => item.path === location);
+
+  // Collapsible nav groups, remembered in localStorage.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    let stored: Record<string, boolean> = {};
+    try { stored = JSON.parse(window.localStorage.getItem("ci.navSections") || "{}"); } catch { /* ignore */ }
+    return Object.fromEntries(menuSections.map(s => [s.title, stored[s.title] ?? s.defaultOpen]));
+  });
+  const toggleSection = (title: string) => setOpenSections(prev => {
+    const next = { ...prev, [title]: !prev[title] };
+    window.localStorage.setItem("ci.navSections", JSON.stringify(next));
+    return next;
+  });
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -429,15 +446,19 @@ function DashboardLayoutContent({
           </SidebarHeader>
 
           <SidebarContent className="gap-0 overflow-y-auto">
-            {menuSections.map((section) => (
-              <div key={section.title} className="py-2">
+            {menuSections.map((section) => {
+              const sectionOpen = isCollapsed || openSections[section.title] || section.items.some(i => i.path === location);
+              return (
+              <div key={section.title} className="py-1">
                 {!isCollapsed && (
-                  <div className="px-4 py-1.5">
+                  <button onClick={() => toggleSection(section.title)} className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-sidebar-accent/40 rounded-md">
                     <span className="text-[10px] font-semibold tracking-wider text-sidebar-foreground/40 uppercase">
                       {section.title}
                     </span>
-                  </div>
+                    <ChevronDown className={`h-3 w-3 text-sidebar-foreground/40 transition-transform ${sectionOpen ? "" : "-rotate-90"}`} />
+                  </button>
                 )}
+                {sectionOpen && (
                 <SidebarMenu className="px-2">
                   {section.items.map((item) => {
                     const isActive = location === item.path;
@@ -466,8 +487,10 @@ function DashboardLayoutContent({
                     );
                   })}
                 </SidebarMenu>
+                )}
               </div>
-            ))}
+              );
+            })}
           </SidebarContent>
 
           <SidebarFooter className="p-3 border-t border-sidebar-border">

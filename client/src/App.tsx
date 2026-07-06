@@ -40,12 +40,10 @@ import IdentityProvidersPage from "./pages/IdentityProviders";
 import EnvironmentsPage from "./pages/Environments";
 import EventEntrypointsPage from "./pages/EventEntrypoints";
 import AlertsPage from "./pages/Alerts";
-import PolicyChainsPage from "./pages/PolicyChains";
 import GeoIpFilteringPage from "./pages/GeoIpFiltering";
 import VaultSecretsPage from "./pages/VaultSecrets";
 import ApiLifecyclePage from "./pages/ApiLifecycle";
 import KafkaReporterPage from "./pages/KafkaReporter";
-import ApiDesignerPage from "./pages/ApiDesigner";
 import LoginPage from "./pages/Login";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AcceptInvitePage from "./pages/AcceptInvite";
@@ -76,7 +74,6 @@ function Router() {
         <Route path="/consumer-apps" component={ConsumerAppsPage} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
         <Route path="/policies" component={PoliciesPage} />
-        <Route path="/policy-chains" component={PolicyChainsPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/metering" component={MeteringPage} />
         <Route path="/billing" component={BillingPage} />
@@ -105,7 +102,6 @@ function Router() {
         <Route path="/api-lifecycle" component={ApiLifecyclePage} />
         <Route path="/gitops-pipeline" component={GitOpsPipelinePage} />
         <Route path="/kafka-reporter" component={KafkaReporterPage} />
-        <Route path="/api-designer" component={ApiDesignerPage} />
             <Route component={NotFound} />
           </Switch>
         </DashboardLayout>

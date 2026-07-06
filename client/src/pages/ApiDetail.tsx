@@ -10,6 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ApiDesignTab } from "@/components/ApiDesignTab";
+import { ApiPlansTab } from "@/components/ApiPlansTab";
+import { ApiTestTab } from "@/components/ApiTestTab";
+import { ApiDeploymentsTab } from "@/components/ApiDeploymentsTab";
 import { ArrowLeft, Globe, Shield, Activity, Code, Server, Clock, Plus, Pencil } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -20,9 +24,6 @@ export default function ApiDetailPage() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
 
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [selectedPolicyId, setSelectedPolicyId] = useState("");
-  const [selectedPhase, setSelectedPhase] = useState<"request" | "response" | "connect">("request");
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", description: "", backendUrl: "", contextPath: "", version: "" });
   const [confirm, setConfirm] = useState<"publish" | "deprecate" | "retire" | null>(null);
@@ -31,8 +32,6 @@ export default function ApiDetailPage() {
   const [showCreated, setShowCreated] = useState(justCreated);
 
   const { data: api, isLoading } = trpc.api.getById.useQuery({ id: apiId }, { enabled: apiId > 0 });
-  const { data: policies } = trpc.policy.list.useQuery({});
-  const { data: chains, refetch: refetchChains } = trpc.policyChain.list.useQuery({ apiId }, { enabled: apiId > 0 });
 
   const updateApi = trpc.api.update.useMutation({
     onSuccess: (_, vars) => {
@@ -41,18 +40,6 @@ export default function ApiDetailPage() {
     },
     onError: (err) => toast.error(err.message),
   });
-
-  const attachPolicy = trpc.policyChain.add.useMutation({
-    onSuccess: () => {
-      refetchChains();
-      setAttachOpen(false);
-      setSelectedPolicyId("");
-      toast.success("Policy attached");
-    },
-  });
-
-  const policyList = (policies as any[]) || [];
-  const chainList = (chains as any[]) || [];
 
   const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", published: "bg-emerald-100 text-emerald-700", deprecated: "bg-amber-100 text-amber-700", retired: "bg-red-100 text-red-700" };
   const protocolColors: Record<string, string> = { rest: "bg-blue-100 text-blue-700", graphql: "bg-pink-100 text-pink-700", grpc: "bg-purple-100 text-purple-700", websocket: "bg-orange-100 text-orange-700" };
@@ -176,8 +163,9 @@ export default function ApiDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
-          <TabsTrigger value="policies">Policies ({chainList.length})</TabsTrigger>
+          <TabsTrigger value="design">Design</TabsTrigger>
+          <TabsTrigger value="plans">Plans</TabsTrigger>
+          <TabsTrigger value="test">Test</TabsTrigger>
           <TabsTrigger value="deployments">Deployments</TabsTrigger>
           <TabsTrigger value="spec">Specification</TabsTrigger>
         </TabsList>
@@ -217,118 +205,20 @@ export default function ApiDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="versions" className="space-y-4 mt-4">
-          <Card className="border border-border/60">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Version History</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Current</Badge>
-                    <span className="text-sm font-medium">v{(api as any).version}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{(api as any).createdAt ? new Date((api as any).createdAt).toLocaleDateString() : ""}</span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-4">Version history is tracked automatically when APIs are updated.</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="design">
+          <ApiDesignTab apiId={apiId} api={api} onSaved={() => utils.api.getById.invalidate({ id: apiId })} />
         </TabsContent>
 
-        <TabsContent value="policies" className="space-y-4 mt-4">
-          <Card className="border border-border/60">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Policy Chain</CardTitle>
-              <Dialog open={attachOpen} onOpenChange={setAttachOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={policyList.length === 0}><Plus className="h-3 w-3 mr-1" />Attach Policy</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Attach Policy to API</DialogTitle></DialogHeader>
-                  <div className="space-y-4 pt-4">
-                    <div>
-                      <Label>Policy</Label>
-                      <Select value={selectedPolicyId} onValueChange={setSelectedPolicyId}>
-                        <SelectTrigger><SelectValue placeholder="Select a policy" /></SelectTrigger>
-                        <SelectContent>
-                          {policyList.map((p: any) => (
-                            <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.type})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Phase</Label>
-                      <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="request">Request</SelectItem>
-                          <SelectItem value="response">Response</SelectItem>
-                          <SelectItem value="connect">Connect</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button className="w-full" disabled={!selectedPolicyId || attachPolicy.isPending}
-                      onClick={() => attachPolicy.mutate({ apiId, policyId: parseInt(selectedPolicyId), phase: selectedPhase, order: chainList.length + 1 })}>
-                      {attachPolicy.isPending ? "Attaching..." : "Attach Policy"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              {chainList.length === 0 ? (
-                <div className="text-center py-6">
-                  <Shield className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No policies attached to this API</p>
-                  {policyList.length === 0 && <p className="text-xs text-muted-foreground mt-1">Create a policy first from the Policies page.</p>}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {chainList.map((chain: any, idx: number) => (
-                    <div key={chain.id} className="flex items-center justify-between p-3 rounded-lg border border-border/40">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
-                        <Shield className="h-4 w-4 text-primary" />
-                        <div>
-                          <span className="text-sm font-medium">{chain.policyName || (chain.policyId ? `Policy #${chain.policyId}` : "Unknown")}</span>
-                          <p className="text-xs text-muted-foreground">{chain.policyType ? `${chain.policyType} · ` : ""}{chain.phase} phase</p>
-                        </div>
-                      </div>
-                      <Badge variant="secondary">{chain.syncSource || "local"}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="plans">
+          <ApiPlansTab apiId={apiId} />
         </TabsContent>
 
-        <TabsContent value="deployments" className="space-y-4 mt-4">
-          <Card className="border border-border/60">
-            <CardHeader className="pb-3"><CardTitle className="text-base">Deployment History</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {(api as any).status === "published" ? (
-                  <div className="flex items-center justify-between p-3 rounded-lg border border-border/40">
-                    <div className="flex items-center gap-3">
-                      <Activity className="h-4 w-4 text-emerald-500" />
-                      <div>
-                        <p className="text-sm font-medium">Production Deployment</p>
-                        <p className="text-xs text-muted-foreground">All regions · v{(api as any).version}</p>
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Active</Badge>
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Activity className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No deployments yet. Publish the API to deploy.</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="test">
+          <ApiTestTab apiId={apiId} api={api} />
+        </TabsContent>
+
+        <TabsContent value="deployments">
+          <ApiDeploymentsTab apiId={apiId} />
         </TabsContent>
 
         <TabsContent value="spec" className="space-y-4 mt-4">

@@ -336,9 +336,8 @@ export async function saveApiFlowsHybrid(apiId: number, flows: { phase: "request
         // Map local flow format to Gravitee V4 flows
         const graviteeFlows = flows.map(f => ({
           enabled: true,
-          selectors: [{ type: "HTTP", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], path: "/", pathOperator: { operator: "STARTS_WITH", path: "/" } }],
-          phase: f.phase === "request" ? "REQUEST" : "RESPONSE",
-          [f.phase === "request" ? "request" : "response"]: [{ policy: f.type, enabled: true, configuration: f.config }],
+          selectors: [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }],
+          [f.phase === "request" ? "request" : "response"]: [{ name: f.type, policy: f.type, enabled: true, configuration: f.config }],
         }));
         await gravitee.updateApiFlows(graviteeApiId, graviteeFlows);
         return { saved: true, synced: true };

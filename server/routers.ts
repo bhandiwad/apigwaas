@@ -434,6 +434,41 @@ const apiRouter = router({
       return { status: 0, statusText: "Connection failed", latencyMs: Date.now() - start, headers: {}, body: err.message, url };
     }
   }),
+  // Test console: proxy a single request through the Gravitee gateway (server-side
+  // to avoid CORS). In local mode there's no gateway, so return a simulated echo.
+  testCall: protectedProcedure.input(z.object({
+    apiId: z.number(),
+    method: z.string().default("GET"),
+    path: z.string().default("/"),
+    headers: z.record(z.string(), z.string()).optional(),
+    body: z.string().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const api = await db.getApiById(input.apiId);
+    if (!api) throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
+    if (ctx.user.role !== "admin" && (api as any).tenantId !== ctx.user.tenantId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+    const connStatus = await graviteeSync.getConnectionStatus();
+    const contextPath = String((api as any).contextPath || "").replace(/\/$/, "");
+    const pathPart = input.path.startsWith("/") ? input.path : `/${input.path}`;
+    const url = `http://localhost:8082${contextPath}${pathPart}`;
+    if (connStatus.mode !== "live") {
+      return { simulated: true, status: 200, statusText: "OK (simulated)", latencyMs: 1, headers: { "x-simulated": "true" },
+        body: JSON.stringify({ note: "simulated — connect Gravitee for live calls", method: input.method, url }, null, 2), url };
+    }
+    const start = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: input.method,
+        headers: { Accept: "application/json", ...(input.headers || {}) },
+        body: ["GET", "HEAD"].includes(input.method.toUpperCase()) ? undefined : input.body,
+        signal: AbortSignal.timeout(10000),
+      });
+      const latencyMs = Date.now() - start;
+      const body = await res.text();
+      return { simulated: false, status: res.status, statusText: res.statusText, latencyMs, headers: Object.fromEntries(res.headers.entries()), body: body.slice(0, 65536), url };
+    } catch (err: any) {
+      return { simulated: false, status: 0, statusText: "Connection failed", latencyMs: Date.now() - start, headers: {}, body: err.message, url };
+    }
+  }),
 });
 
 // ─── Plans Router ────────────────────────────────────────────────────────────
