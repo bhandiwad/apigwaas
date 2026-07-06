@@ -578,7 +578,7 @@ function DashboardLayoutContent({
             <Bell className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" />
           </div>
         </div>
-        <main className="flex-1 p-6 bg-background">{children}</main>
+        <main className="flex-1 min-w-0 overflow-x-hidden p-6 bg-background">{children}</main>
       </SidebarInset>
     </>
   );

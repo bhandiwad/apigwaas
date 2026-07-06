@@ -13,7 +13,7 @@ import { SyncBadge } from "@/components/SyncBadge";
 import { toast } from "sonner";
 
 export function ApiPlansTab({ apiId }: { apiId: number }) {
-  const { data: plans, refetch } = trpc.plan.list.useQuery({ apiId });
+  const { data: plans, refetch, isLoading } = trpc.plan.list.useQuery({ apiId });
   const create = trpc.plan.create.useMutation({ onSuccess: () => { refetch(); setOpen(false); setForm({ name: "", rateLimit: 100, quotaLimit: 10000, autoApprove: true }); toast.success("Plan created"); }, onError: (e) => toast.error(e.message) });
   const update = trpc.plan.update.useMutation({ onSuccess: () => refetch(), onError: (e) => toast.error(e.message) });
   const [open, setOpen] = useState(false);
@@ -48,7 +48,9 @@ export function ApiPlansTab({ apiId }: { apiId: number }) {
         </Dialog>
       </div>
 
-      {rows.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-2">{[1, 2].map(i => <Card key={i} className="animate-pulse h-16" />)}</div>
+      ) : rows.length === 0 ? (
         <Card><CardContent className="py-10 text-center">
           <KeyRound className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No plans yet. Add one so consumers can subscribe.</p>

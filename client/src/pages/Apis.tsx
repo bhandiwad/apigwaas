@@ -157,7 +157,10 @@ export default function ApisPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((api: any) => (
-            <Card key={api.id} className="border border-border/60 hover:shadow-sm hover:border-primary/40 transition-all cursor-pointer" onClick={() => setLocation(`/apis/${api.id}`)}>
+            <Card key={api.id} role="button" tabIndex={0} aria-label={`Open ${api.name}`}
+              className="border border-border/60 hover:shadow-sm hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none transition-all cursor-pointer"
+              onClick={() => setLocation(`/apis/${api.id}`)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLocation(`/apis/${api.id}`); } }}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Globe className="h-5 w-5 text-primary" /></div>
