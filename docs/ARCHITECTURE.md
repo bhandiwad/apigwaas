@@ -13,23 +13,24 @@ The system is composed of four primary layers:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          Presentation Layer                              │
-│  React 19 · Tailwind CSS 4 · shadcn/ui · Recharts · tRPC Client        │
-│  38 Feature Pages · DashboardLayout · infinitAIZEN Branding             │
+│  React 19 · Tailwind CSS 4 · shadcn/ui · tRPC Client                   │
+│  Wizard-driven UI · Tenant switcher · Sync badges · Sify branding       │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │ HTTP/tRPC (JSON over HTTP POST)
 ┌─────────────────────────────────▼───────────────────────────────────────┐
 │                          Application Layer                               │
-│  Express 4 · tRPC 11 · 20 Routers · 91 Procedures                      │
+│  Express 4 · tRPC 11 · 25 Routers · ~140 Procedures                    │
 │  Auth Middleware · RBAC Guards · Input Validation (Zod)                  │
+│  Background jobs: alert evaluator · analytics sync                       │
 ├────────────────────┬────────────────────────┬───────────────────────────┤
 │  Gravitee Sync     │  Business Logic        │  Audit & Compliance       │
 │  (graviteeSync.ts) │  (routers.ts + db.ts)  │  (SHA-256, immutable log) │
 └────────┬───────────┴────────────┬───────────┴───────────────────────────┘
          │                        │
 ┌────────▼───────────┐  ┌────────▼───────────────────────────────────────┐
-│  Gravitee APIM     │  │  Data Layer                                     │
-│  Management API    │  │  TiDB/MySQL · 29 Tables · Drizzle ORM           │
-│  (REST v2)         │  │  S3 Object Storage · File Uploads               │
+│  Gravitee APIM 4.x │  │  Data Layer                                     │
+│  Management API v2 │  │  PostgreSQL 16 · 35 Tables · Drizzle ORM        │
+│  + v4 API import   │  │  8 migrations · append-only audit log           │
 └────────────────────┘  └─────────────────────────────────────────────────┘
 ```
 
@@ -67,26 +68,20 @@ The backend is a single Express process serving both the API and the built front
 
 ```
 Express Server (server/_core/index.ts)
-├── Static File Serving (Vite build output)
-├── OAuth Callback Handler (/api/oauth/callback)
-├── Storage Proxy (/manus-storage/*)
+├── Static File Serving (Vite build output / Vite middleware in dev)
+├── Auth Handlers (/api/auth/*: register, login, reset, accept-invite)
 ├── tRPC Handler (/api/trpc)
-│   ├── Context Builder (session → user)
+│   ├── Context Builder (session cookie → JWT → user)
 │   ├── Public Procedures (no auth required)
 │   └── Protected Procedures (auth required)
-│       ├── Tenant Router
-│       ├── Workspace Router
+│       ├── Tenant / Workspace Routers
 │       ├── API Router → Gravitee Sync
 │       ├── Gateway Router → Gravitee Sync
-│       ├── Policy Chain Router → Gravitee Sync
-│       ├── DCR Router → Gravitee Sync
-│       ├── DevPortal Router → Gravitee Sync
+│       ├── Policy Chain / Masking / DCR / DevPortal Routers → Gravitee Sync
 │       ├── Subscription Router → Gravitee Sync
-│       ├── Billing Router
-│       ├── Audit Router
-│       ├── Analytics Router → Gravitee Analytics
-│       └── ... (20 routers total)
-└── Heartbeat Handler (scheduled tasks)
+│       ├── Billing / Audit / Analytics Routers
+│       └── ... (25 feature routers total)
+└── Background jobs (startAlertEvaluator, startAnalyticsSync)
 ```
 
 ### Gravitee Integration Architecture
@@ -95,7 +90,7 @@ The Gravitee integration uses a two-layer approach:
 
 **Layer 1: API Client (`gravitee.ts`)**
 
-A typed Axios-based HTTP client that maps to the Gravitee Management API v2 endpoints. It handles authentication (Bearer token), request retry with exponential backoff, timeout management, and structured error responses.
+A typed Axios-based HTTP client that maps to the Gravitee Management API v2 endpoints (`/management/v2/environments/{envId}/…`) and supports v4 native API definitions (including OpenAPI/Swagger import via `_import/swagger`). It handles authentication (Bearer token or basic auth), request retry with exponential backoff, timeout management, a fail-fast health probe, and structured error responses.
 
 **Layer 2: Sync Service (`graviteeSync.ts`)**
 
@@ -160,24 +155,25 @@ Consumer App (1) ──── (N) Subscription ──── (1) Plan
 ### Authentication Flow
 
 ```
-Browser → /api/oauth/callback?code=xxx&state=yyy
-         → Validate OAuth code with Manus OAuth server
-         → Upsert user in local database
+Browser → POST /api/auth/login { email, password }
+         → Load user by email; verify bcrypt password hash
          → Sign JWT session token
          → Set httpOnly, secure, sameSite cookie
-         → Redirect to frontend with session active
+         → Frontend loads with session active
 ```
+
+Register, reset-password, and accept-invite follow the same bcrypt + JWT pattern. Invitations are backed by `invite_tokens`; tenants may also enable self-registration (`allowSelfRegistration`, `allowedEmailDomains`, `selfRegDefaultRole`).
 
 ### Authorization Model
 
 ```
 Request → tRPC Context Builder
-         → Extract session cookie
-         → Verify JWT signature
-         → Load user from database
-         → Inject ctx.user into procedure
-         → protectedProcedure checks ctx.user exists
-         → Business logic checks ctx.user.role for admin operations
+         → Extract session cookie → verify JWT signature
+         → Load user from database → inject ctx.user
+         → protectedProcedure  : requires ctx.user
+         → tenantProcedure      : scopes to ctx.tenantId
+         → tenantWriteProcedure : requires platform-admin OR tenant role
+                                  owner/admin/developer (null role = view-only)
 ```
 
 ### Data Protection
@@ -187,7 +183,7 @@ Request → tRPC Context Builder
 | Transport | HTTPS/TLS for all communications |
 | Session | httpOnly, secure, sameSite=none cookies with JWT |
 | API | Bearer token authentication for Gravitee API calls |
-| Database | TLS connection, parameterized queries via Drizzle ORM |
+| Database | PostgreSQL over TLS, parameterized queries via Drizzle ORM |
 | Secrets | Environment variables, never committed to code |
 | Audit | SHA-256 signatures on exported audit logs |
 | PII | JSONPath-based data masking at the gateway level |
@@ -202,7 +198,7 @@ The application is stateless (session in JWT cookie, data in database), enabling
 
 ### Database Scaling
 
-TiDB provides horizontal scaling for the database layer. The schema uses integer primary keys with auto-increment for efficient B-tree indexing. JSON columns are used for flexible configuration data that does not require relational queries.
+PostgreSQL 16 backs the platform. The schema uses integer primary keys with auto-increment for efficient B-tree indexing, composite indexes on hot query paths (e.g. tenant + createdAt on metering events), and `jsonb` columns for flexible configuration that does not require relational queries. Read scaling is achieved via read replicas; the application is stateless and can run behind a load balancer.
 
 ### Gateway Scaling
 
@@ -233,8 +229,10 @@ When connected to Gravitee, additional metrics are available:
 
 ### Alerting
 
-The alert system supports configurable thresholds with multi-channel delivery:
+The alert system is evaluated by a **live background job** (`alertEvaluator.ts`) that runs on a 60-second interval, compares configured thresholds against real metering data, and fires in-app notifications on breach:
 
-- **Channels**: Email, Slack, PagerDuty, Webhook
-- **Metrics**: Error rate, latency P99, quota usage, certificate expiry, subscription expiry
-- **Evaluation**: Threshold-based with configurable comparison operators and time windows
+- **Metrics**: Error rate, latency P99, quota usage (plus certificate/subscription expiry rules)
+- **Evaluation**: Threshold-based with configurable comparison operators, run continuously against `metering_events`
+- **Delivery**: In-app notifications; email/Slack/PagerDuty/Webhook channels are configurable per rule
+
+A second background job (`analyticsSync.ts`) aggregates usage/metering data for the analytics dashboard.

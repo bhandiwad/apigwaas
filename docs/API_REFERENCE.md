@@ -6,7 +6,9 @@ All backend APIs are exposed via tRPC over HTTP POST at `/api/trpc`. This docume
 
 ## Authentication
 
-All procedures marked as **protected** require a valid session cookie. The cookie is set during the OAuth callback flow. Unauthenticated requests to protected procedures return a `401 UNAUTHORIZED` error.
+All procedures marked as **protected** require a valid session cookie. The cookie is issued by the email/password auth handlers (`/api/auth/login`, `/api/auth/register`, reset, accept-invite) after verifying a bcrypt password hash. Unauthenticated requests to protected procedures return a `401 UNAUTHORIZED` error.
+
+Procedure guards: `protectedProcedure` (authenticated), `tenantProcedure` (scoped to `ctx.tenantId`), `tenantWriteProcedure` (requires platform-admin or tenant role owner/admin/developer), and `adminProcedure`.
 
 ---
 
@@ -164,7 +166,7 @@ Creates a new API definition. When Gravitee is connected, also creates the API i
   workspaceId: number;
   name: string;
   version: string;
-  protocol: "REST" | "GraphQL" | "gRPC" | "WebSocket" | "AsyncAPI";
+  protocol: "rest" | "graphql" | "grpc" | "websocket" | "kafka" | "mqtt";
   description?: string;
   targetUrl?: string;
 }
@@ -200,16 +202,37 @@ Gets detailed API information including Gravitee sync state.
 
 ### `api.importOpenApi` (Mutation, Protected)
 
-Imports an API from an OpenAPI specification. When Gravitee is connected, imports directly into the gateway.
+Imports an API from an OpenAPI/Swagger specification (OpenAPI 3.x or Swagger 2.0, JSON or YAML). When Gravitee is connected, imports natively into the gateway via `_import/swagger`.
 
 **Input:**
 ```typescript
 {
   tenantId: number;
   workspaceId: number;
-  spec: string; // OpenAPI JSON or YAML content
+  spec: string;                 // OpenAPI/Swagger JSON or YAML content
+  withDocumentation?: boolean;  // also import the spec as portal documentation
 }
 ```
+
+### `api.checkContextPath` (Query, Protected)
+
+Checks whether a gateway context path is available (used by the create wizard).
+
+**Input:** `{ contextPath: string; tenantId?: number; excludeApiId?: number }`
+
+**Response:** `{ available: boolean; conflictingApi?: { id: number; name: string } }`
+
+### `api.testCall` (Mutation, Protected)
+
+Server-side proxy that sends a test request through the gateway (or simulates it in Local Mode) and records a metering event.
+
+**Input:** `{ apiId: number; method?: string; path?: string; headers?: Record<string,string>; body?: string }`
+
+### `api.publish` / `api.deprecate` / `api.retire` (Mutation, Protected)
+
+Atomic status transitions. The local status only changes after the corresponding Gravitee operation succeeds; the real gateway error is surfaced on failure. `retire` closes published plans first.
+
+**Input:** `{ id: number }`
 
 ---
 
@@ -229,11 +252,11 @@ Creates a new plan with rate limiting and pricing. Syncs to Gravitee when connec
 ```typescript
 {
   apiId: number;
-  tenantId: number;
   name: string;
   rateLimit: number;
-  rateLimitPeriod: "second" | "minute" | "hour" | "day" | "month";
-  quota?: number;
+  rateLimitPeriod: "second" | "minute" | "hour" | "day";
+  quotaLimit: number;
+  quotaPeriod: "day" | "week" | "month";
   monthlyFee?: string; // Decimal string
   description?: string;
 }
@@ -249,11 +272,15 @@ Updates plan configuration.
   id: number;
   name?: string;
   rateLimit?: number;
-  quota?: number;
+  quotaLimit?: number;
   monthlyFee?: string;
-  status?: "staging" | "published" | "deprecated" | "closed";
+  status?: "active" | "closed" | "deprecated";
 }
 ```
+
+### `plan.delete` (Mutation, Protected)
+
+Deletes a plan (blocked while it has active subscribers). **Input:** `{ id: number }`
 
 ---
 
@@ -286,16 +313,15 @@ Lists API deployments with live sync status from Gravitee.
 
 **Input:** `{ tenantId: number; clusterId?: number }`
 
-### `gateway.deploy` (Mutation, Protected)
+### `gateway.deploy` (Mutation, tenant-write)
 
-Deploys an API to a gateway cluster. Triggers Gravitee deployment when connected.
+Deploys an API to one or more gateway clusters. Triggers Gravitee deployment when connected; if the API isn't yet on the gateway it is published (with a default plan) as part of the deploy.
 
 **Input:**
 ```typescript
 {
   apiId: number;
-  clusterId: number;
-  tenantId: number;
+  clusterIds: number[] | "all";  // specific clusters, or every registered cluster
   version: string;
   strategy: "rolling" | "blue_green" | "canary";
 }
@@ -303,9 +329,9 @@ Deploys an API to a gateway cluster. Triggers Gravitee deployment when connected
 
 ### `gateway.undeploy` (Mutation, Protected)
 
-Undeploys an API from a cluster.
+Undeploys (retires) a deployment from its cluster.
 
-**Input:** `{ deploymentId: number }`
+**Input:** `{ id: number }`  // the deployment id
 
 ### `gateway.instances` (Query, Protected)
 
@@ -323,6 +349,7 @@ Returns the current Gravitee connection status.
   connected: boolean;
   mode: "live" | "local";
   version?: string;
+  gatewayBaseUrl: string; // configurable via GRAVITEE_GATEWAY_URL
   error?: string;
 }
 ```
@@ -436,39 +463,40 @@ Returns failed payment alerts requiring attention.
 
 ### `analytics.dashboard` (Query, Protected)
 
-Returns platform-wide analytics summary.
-
-**Input:** `{ tenantId?: number; period?: string }`
-
-### `analytics.topApis` (Query, Protected)
-
-Returns top APIs by call volume.
-
-**Input:** `{ tenantId?: number; limit?: number }`
-
-### `analytics.topConsumers` (Query, Protected)
-
-Returns top consumer applications by usage.
-
-**Input:** `{ tenantId?: number; limit?: number }`
-
-### `analytics.latencyTrends` (Query, Protected)
-
-Returns latency percentile trends over time.
-
-**Input:** `{ tenantId?: number; period?: string }`
-
-### `analytics.metering` (Query, Protected)
-
-Returns metering pipeline status (dual: customer-facing + Sify-side).
+Returns the platform/tenant KPI summary (APIs, consumer apps, subscriptions, workspaces, call totals). Platform admins with no `tenantId` get platform-wide stats.
 
 **Input:** `{ tenantId?: number }`
 
-### `analytics.gravitee` (Query, Protected)
+### `analytics.usage` (Query, Protected)
 
-Returns live analytics from Gravitee when connected.
+Returns usage records (per-API calls, errors, latency, `date`) for charts such as top-APIs and requests-over-time.
 
-**Input:** `{ apiId?: string; period?: string }`
+**Input:** `{ tenantId?: number; startDate?: string; endDate?: string }`
+
+### `analytics.metering` (Query, Protected)
+
+Returns metering events for a pipeline (dual: customer-facing + Sify-side).
+
+**Input:** `{ tenantId?: number; pipeline?: "customer_facing" | "sify_internal" }`
+
+### `analytics.recordCall` (Mutation, Protected)
+
+Records a single API call into `metering_events` + `usage_records` (used by the test console).
+
+**Input:** `{ apiId: number; statusCode?: number; latencyMs?: number; method?: string }`
+
+### `analytics.simulateTraffic` (Mutation, Protected)
+
+Seeds synthetic traffic for demos/analytics. **Input:** `{ count?: number }`
+
+### Metric Extraction Rules (persisted)
+
+Custom metric-extraction rules for the metering pipeline, backed by the `metric_extraction_rules` table.
+
+- `analytics.extractionRules` (Query, tenant) → `Array<MetricExtractionRule>`
+- `analytics.createExtractionRule` (Mutation, tenant) — `{ name, extractionPath, extractionType?: "jsonpath"|"header"|"regex"|"groovy", metricType?: "counter"|"gauge"|"histogram"|"summary", kafkaTopic? }`
+- `analytics.updateExtractionRule` (Mutation, tenant) — `{ id, enabled?, extractionPath?, extractionType?, metricType?, kafkaTopic? }`
+- `analytics.deleteExtractionRule` (Mutation, tenant) — `{ id }`
 
 ---
 
@@ -525,16 +553,18 @@ The following routers follow similar patterns (list, create, update, delete):
 | Router | Key Procedures |
 |--------|---------------|
 | `consumerApp` | `list`, `create`, `update`, `regenerateCredentials` |
-| `subscription` | `list`, `create`, `update` |
-| `policy` | `list`, `create`, `update`, `delete` |
+| `subscription` | `list`, `create`, `approve`, `reject`, `revoke`, `rotateKey` |
+| `policy` | `list`, `create`, `update`, `delete`, `deployIpFiltering` |
 | `policyChain` | `list`, `add`, `update`, `remove` |
 | `devPortal` | `list`, `create`, `update` |
 | `dcr` | `clients`, `register`, `rotateSecret`, `updateStatus` |
-| `masking` | `rules`, `createRule`, `updateRule`, `deleteRule` |
+| `masking` | `rules`, `createRule`, `updateRule`, `deleteRule`, `deployToGateway` |
 | `idp` | `list`, `create`, `update` |
-| `environment` | `list`, `create`, `promote` |
-| `alert` | `rules`, `create`, `channels` |
-| `eventEntrypoint` | `list`, `create`, `update` |
+| `env` | `list`, `create`, `promote` |
+| `alert` | `rules`, `create`, `channels` (evaluated by the `alertEvaluator` background job) |
+| `event` | `list`, `create`, `update` (Kafka/MQTT/RabbitMQ/Webhook entrypoints) |
+| `kafkaReporter` | `config`, `update` |
+| `notification` | `list`, `markRead` |
 | `compliance` | `artifacts`, `createArtifact`, `byokKeys`, `createByokKey` |
 | `support` | `tickets`, `createTicket`, `updateTicket` |
 | `status` | `services`, `incidents`, `createIncident` |

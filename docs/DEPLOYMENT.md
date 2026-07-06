@@ -55,11 +55,11 @@ Or use the script directly:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Platform UI | http://localhost:3000 | OAuth login |
+| Platform UI | http://localhost:3000 | email/password login |
 | Gravitee Gateway | http://localhost:8082 | — |
 | Gravitee Management API | http://localhost:8083 | admin/admin |
 | Gravitee Console UI | http://localhost:8084 | admin/admin |
-| MySQL | localhost:3306 | root/cloudinfinit |
+| PostgreSQL | localhost:5432 | cloudinfinit/cloudinfinit_secret |
 | MongoDB | localhost:27017 | gravitee/gravitee |
 | Redis | localhost:6379 | — |
 | Elasticsearch | localhost:9200 | — |
@@ -96,7 +96,7 @@ cp deploy/docker/.env.template deploy/docker/.env
 └─────────┬──────────┘          └───────────┬────────────────┘
           │                                  │
 ┌─────────▼──────────┐          ┌───────────▼────────────────┐
-│  MySQL 8.0         │          │  Gravitee Management API   │
+│  PostgreSQL 16     │          │  Gravitee Management API   │
 │  (Platform DB)     │          │  (Java :8083)              │
 └────────────────────┘          └───────────┬────────────────┘
                                             │
@@ -190,10 +190,12 @@ helm upgrade --install cloudinfinit-apigw deploy/helm/cloudinfinit-apigw \
          │                    │                    │
     ┌────┴────┐         ┌────┴────┐         ┌────┴────┐
     │ RDS     │         │ DocDB   │         │ ElastiC │
-    │ MySQL   │         │ MongoDB │         │ Redis   │
+    │ Postgres│         │ MongoDB │         │ Redis   │
     │ Multi-AZ│         │ 3-node  │         │ Cluster │
     └─────────┘         └─────────┘         └─────────┘
 ```
+
+> ⚠️ **The platform database must be PostgreSQL** (the app uses `pg`/Drizzle with a `postgresql` dialect). The Docker Compose stack already provisions Postgres 16. The Terraform RDS module (`deploy/terraform/modules/rds`) **currently provisions MySQL 8.0** and must be changed to `engine = "postgres"` (parameter-group family `postgres16`, port `5432`) before cloud deployment. See the note under [What Gets Created](#what-gets-created).
 
 ### Scaling
 
@@ -227,11 +229,13 @@ Terraform modules provision the complete AWS infrastructure with production-grad
 |----------|--------|---------|-----|
 | VPC + Subnets | `modules/vpc` | Network isolation, 3 AZs | Multi-AZ |
 | EKS Cluster | `modules/eks` | Kubernetes control plane + managed node groups | Multi-AZ |
-| RDS MySQL 8.0 | `modules/rds` | Platform database | Multi-AZ |
+| RDS PostgreSQL 16 | `modules/rds` | Platform database | Multi-AZ |
 | DocumentDB | `modules/documentdb` | Gravitee MongoDB | 3-node cluster |
 | ElastiCache Redis | `modules/elasticache` | Rate limiting, session cache | 2-node cluster |
 | OpenSearch | `modules/opensearch` | Gravitee analytics, logging | 3-node cluster |
 | S3 Buckets | `modules/s3` | Audit logs, backups, assets | Cross-region |
+
+> ⚠️ **Known IaC fix required:** the `modules/rds` source currently sets `engine = "mysql"` / `engine_version = "8.0"`. The platform requires **PostgreSQL**, so this module must be switched to `engine = "postgres"` (e.g. `engine_version = "16"`, `family = "postgres16"`, port `5432`) and the `DATABASE_URL` updated to a `postgresql://` string. The Docker Compose stack is already on Postgres 16; only the Terraform module lags.
 
 ### Provisioning Steps
 
@@ -333,12 +337,12 @@ v* tag push → Deploy to Production → Health Check → ✓
 |--------|---------|
 | `AWS_ACCESS_KEY_ID` | AWS authentication for EKS/ECR |
 | `AWS_SECRET_ACCESS_KEY` | AWS authentication |
-| `STAGING_DATABASE_URL` | Staging MySQL connection string |
+| `STAGING_DATABASE_URL` | Staging PostgreSQL connection string |
 | `STAGING_GRAVITEE_API_URL` | Staging Gravitee Management API URL |
 | `STAGING_GRAVITEE_API_TOKEN` | Staging Gravitee PAT |
 | `STAGING_GRAVITEE_ORG_ID` | Staging organization ID |
 | `STAGING_GRAVITEE_ENV_ID` | Staging environment ID |
-| `PROD_DATABASE_URL` | Production MySQL connection string |
+| `PROD_DATABASE_URL` | Production PostgreSQL connection string |
 | `PROD_GRAVITEE_API_URL` | Production Gravitee Management API URL |
 | `PROD_GRAVITEE_API_TOKEN` | Production Gravitee PAT |
 | `PROD_GRAVITEE_ORG_ID` | Production organization ID |
