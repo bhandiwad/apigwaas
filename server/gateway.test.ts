@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
+import * as db from "./db";
 import type { TrpcContext } from "./_core/context";
 
 function createAdminContext(): TrpcContext {
@@ -46,6 +47,9 @@ describe("gateway router", () => {
       graviteeVersion: "4.2.0",
     });
     expect(result).toBeDefined();
+    // Tests run against the real DB — clean up so the clusters list doesn't fill
+    // with junk rows.
+    if (result?.id) await db.deleteGatewayCluster(result.id);
   });
 
   it("deploy validates required fields", async () => {
@@ -128,6 +132,7 @@ describe("data masking router", () => {
       category: "pan_card",
     });
     expect(result).toBeDefined();
+    if (result?.id) await db.deleteMaskingRule(result.id);
   });
 });
 
@@ -148,6 +153,7 @@ describe("environment router", () => {
       order: 2,
     });
     expect(result).toBeDefined();
+    if (result?.id) await db.deleteApiEnvironment(result.id);
   });
 });
 
@@ -169,5 +175,6 @@ describe("alert router", () => {
       threshold: 5,
     });
     expect(result).toBeDefined();
+    if (result?.id) await db.deleteAlertRule(result.id);
   });
 });

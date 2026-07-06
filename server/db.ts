@@ -87,6 +87,11 @@ export async function createTenant(data: typeof tenants.$inferInsert) {
   return result[0]?.id ?? null;
 }
 
+export async function deleteTenant(id: number) {
+  const db = getDb();
+  await db.delete(tenants).where(eq(tenants.id, id));
+}
+
 export async function getTenants(filters?: { status?: string; tier?: string }) {
   const db = getDb();
   return db.select().from(tenants).orderBy(desc(tenants.createdAt));
@@ -560,6 +565,11 @@ export async function createGatewayCluster(data: typeof gatewayClusters.$inferIn
 export async function updateGatewayCluster(id: number, data: Partial<typeof gatewayClusters.$inferInsert>) {
   const db = getDb();
   await db.update(gatewayClusters).set({ ...data, updatedAt: new Date() }).where(eq(gatewayClusters.id, id));
+}
+
+export async function deleteGatewayCluster(id: number) {
+  const db = getDb();
+  await db.delete(gatewayClusters).where(eq(gatewayClusters.id, id));
 }
 
 // ─── API Deployments ────────────────────────────────────────────────────────

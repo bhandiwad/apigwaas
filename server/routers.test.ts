@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
+import * as db from "./db";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
@@ -89,7 +90,7 @@ describe("tenant router validation", () => {
     const caller = appRouter.createCaller(ctx);
     // This tests that the input validation passes (the actual DB call may fail in test env)
     try {
-      await caller.tenant.create({
+      const created = await caller.tenant.create({
         name: "Valid Corp",
         tier: "enterprise",
         gstin: "22AAAAA0000A1Z5",
@@ -97,6 +98,8 @@ describe("tenant router validation", () => {
         region: "mumbai",
         contactEmail: "admin@valid.corp",
       });
+      // Tests hit the real DB — remove the row we just created.
+      if (created?.id) await db.deleteTenant(created.id);
     } catch (e: any) {
       // DB errors are acceptable in test env, but validation errors are not
       expect(e.message).not.toContain("invalid");
