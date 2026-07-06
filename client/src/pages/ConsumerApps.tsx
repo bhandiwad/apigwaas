@@ -3,20 +3,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Zap, Plus, Copy, ChevronRight, Link2, Ban } from "lucide-react";
+import { Zap, Plus, Copy, ChevronRight, Link2, Ban, RefreshCw, KeyRound } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useTenantContext } from "@/contexts/TenantContext";
 
 export default function ConsumerAppsPage() {
+  const [, navigate] = useLocation();
   const { effectiveTenantId, workspaces } = useTenantContext();
   const { data: appsResult, isLoading, refetch } = trpc.consumerApp.list.useQuery({ tenantId: effectiveTenantId });
   const apps: any[] = (appsResult as any)?.data ?? (Array.isArray(appsResult) ? appsResult : []);
-  const { data: subscriptions } = trpc.subscription.list.useQuery(undefined);
-  const { data: apis } = trpc.api.list.useQuery({});
+  const { data: subscriptions, refetch: refetchSubs } = trpc.subscription.list.useQuery({ tenantId: effectiveTenantId });
+  const { data: apis } = trpc.api.list.useQuery({ tenantId: effectiveTenantId });
   const workspaceList = (workspaces as any[]) || [];
   const subList: any[] = (subscriptions as any)?.data ?? (Array.isArray(subscriptions) ? subscriptions : []);
   const apiList: any[] = (apis as any[]) || [];
@@ -27,14 +30,20 @@ export default function ConsumerAppsPage() {
   const revokeMutation = trpc.consumerApp.revoke.useMutation({
     onSuccess: () => { refetch(); setDetailApp(null); toast.success("App revoked"); },
   });
+  const rotateKey = trpc.subscription.rotateKey.useMutation({
+    onSuccess: () => { refetchSubs(); toast.success("API key rotated"); },
+    onError: (e) => toast.error(e.message),
+  });
 
   const [open, setOpen] = useState(false);
   const [credentials, setCredentials] = useState<{ clientId: string; clientSecret: string } | null>(null);
   const [form, setForm] = useState({ name: "", description: "", ownerEmail: "", workspaceId: "" });
   const [detailApp, setDetailApp] = useState<any | null>(null);
   const [revokeConfirm, setRevokeConfirm] = useState(false);
+  const [shownKeys, setShownKeys] = useState<Record<number, boolean>>({});
 
   const appSubscriptions = (app: any) => subList.filter((s: any) => s.consumerAppId === app.id);
+  const apiName = (id: number) => apiList.find(a => a.id === id)?.name || `API #${id}`;
 
   return (
     <div className="space-y-6">
@@ -73,12 +82,12 @@ export default function ConsumerAppsPage() {
       </div>
 
       {credentials && (
-        <Card className="border-2 border-amber-300 bg-amber-50">
+        <Card className="border-2 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
           <CardContent className="p-4">
-            <p className="font-semibold text-sm text-amber-800 mb-2">Client credentials generated — save these now, the secret won't be shown again.</p>
+            <p className="font-semibold text-sm text-amber-800 dark:text-amber-300 mb-2">Client credentials generated — save these now, the secret won't be shown again.</p>
             <div className="space-y-2">
-              <div className="flex items-center gap-2"><Label className="w-24 text-xs">Client ID:</Label><code className="text-xs bg-white px-2 py-1 rounded flex-1">{credentials.clientId}</code><Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(credentials.clientId); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button></div>
-              <div className="flex items-center gap-2"><Label className="w-24 text-xs">Secret:</Label><code className="text-xs bg-white px-2 py-1 rounded flex-1">{credentials.clientSecret}</code><Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(credentials.clientSecret); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button></div>
+              <div className="flex items-center gap-2"><Label className="w-24 text-xs">Client ID:</Label><code className="text-xs bg-background px-2 py-1 rounded flex-1 break-all">{credentials.clientId}</code><Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(credentials.clientId); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button></div>
+              <div className="flex items-center gap-2"><Label className="w-24 text-xs">Secret:</Label><code className="text-xs bg-background px-2 py-1 rounded flex-1 break-all">{credentials.clientSecret}</code><Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(credentials.clientSecret); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button></div>
             </div>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => setCredentials(null)}>Dismiss</Button>
           </CardContent>
@@ -90,21 +99,24 @@ export default function ConsumerAppsPage() {
       ) : apps.length === 0 ? (
         <Card className="border-dashed"><CardContent className="p-12 text-center"><Zap className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" /><p className="text-muted-foreground">No consumer applications registered</p></CardContent></Card>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {apps.map((app) => {
             const subs = appSubscriptions(app);
             return (
-              <Card key={app.id} className="border border-border/60 hover:shadow-sm hover:border-primary/40 transition-all cursor-pointer" onClick={() => setDetailApp(app)}>
+              <Card key={app.id} role="button" tabIndex={0} aria-label={`Open ${app.name}`}
+                className="border border-border/60 hover:shadow-sm hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none transition-all cursor-pointer"
+                onClick={() => { setDetailApp(app); setRevokeConfirm(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailApp(app); } }}>
                 <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><Zap className="h-4 w-4 text-primary" /></div>
-                    <div>
-                      <h3 className="font-semibold text-sm">{app.name}</h3>
-                      <p className="text-xs text-muted-foreground font-mono">{app.clientId}</p>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Zap className="h-4 w-4 text-primary" /></div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sm truncate">{app.name}</h3>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{app.clientId}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {subs.length > 0 && <Badge variant="outline" className="text-xs"><Link2 className="h-3 w-3 mr-1" />{subs.length} {subs.length === 1 ? "subscription" : "subscriptions"}</Badge>}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {subs.length > 0 && <Badge variant="outline" className="text-xs"><Link2 className="h-3 w-3 mr-1" />{subs.length}</Badge>}
                     <Badge variant="secondary" className={app.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>{app.status}</Badge>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
                   </div>
@@ -115,76 +127,86 @@ export default function ConsumerAppsPage() {
         </div>
       )}
 
-      {/* App Detail Dialog */}
-      {detailApp && (
-        <Dialog open={!!detailApp} onOpenChange={(o) => { if (!o) { setDetailApp(null); setRevokeConfirm(false); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                {detailApp.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div className="flex items-center justify-between">
-                <Badge variant="secondary" className={detailApp.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>{detailApp.status}</Badge>
-                {detailApp.description && <p className="text-xs text-muted-foreground">{detailApp.description}</p>}
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 p-2 bg-muted rounded">
-                  <span className="text-muted-foreground w-24 text-xs">Client ID</span>
-                  <code className="text-xs flex-1 font-mono">{detailApp.clientId}</code>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { navigator.clipboard.writeText(detailApp.clientId); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button>
+      {/* App detail drawer */}
+      <Sheet open={!!detailApp} onOpenChange={(o) => { if (!o) { setDetailApp(null); setRevokeConfirm(false); } }}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          {detailApp && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2"><Zap className="h-4 w-4 text-primary" />{detailApp.name}</SheetTitle>
+              </SheetHeader>
+              <div className="space-y-5 mt-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className={detailApp.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>{detailApp.status}</Badge>
+                  {detailApp.description && <span className="text-xs text-muted-foreground">{detailApp.description}</span>}
                 </div>
-                {detailApp.ownerEmail && <div className="flex items-center gap-2"><span className="text-muted-foreground text-xs w-24">Owner</span><span className="text-xs">{detailApp.ownerEmail}</span></div>}
-                <div className="flex items-center gap-2"><span className="text-muted-foreground text-xs w-24">Registered</span><span className="text-xs">{detailApp.createdAt ? new Date(detailApp.createdAt).toLocaleDateString() : "N/A"}</span></div>
-              </div>
 
-              {/* Subscriptions */}
-              <div>
-                <h4 className="text-sm font-medium mb-2">API Subscriptions</h4>
-                {appSubscriptions(detailApp).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No subscriptions yet.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {appSubscriptions(detailApp).map((sub: any) => {
-                      const api = apiList.find((a: any) => a.id === sub.apiId);
-                      return (
-                        <div key={sub.id} className="flex items-center justify-between p-2 rounded border text-xs">
-                          <span className="font-medium">{api?.name || `API #${sub.apiId}`}</span>
-                          <Badge variant="secondary" className={sub.status === "approved" ? "bg-emerald-100 text-emerald-700" : sub.status === "pending" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}>{sub.status}</Badge>
-                        </div>
-                      );
-                    })}
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                    <span className="text-muted-foreground w-20 text-xs shrink-0">Client ID</span>
+                    <code className="text-xs flex-1 font-mono break-all">{detailApp.clientId}</code>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { navigator.clipboard.writeText(detailApp.clientId); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button>
                   </div>
-                )}
-              </div>
+                  {detailApp.ownerEmail && <div className="flex gap-2 px-1"><span className="text-muted-foreground text-xs w-20">Owner</span><span className="text-xs">{detailApp.ownerEmail}</span></div>}
+                  <div className="flex gap-2 px-1"><span className="text-muted-foreground text-xs w-20">Registered</span><span className="text-xs">{detailApp.createdAt ? new Date(detailApp.createdAt).toLocaleDateString() : "N/A"}</span></div>
+                </div>
 
-              {/* Actions */}
-              {detailApp.status === "active" && (
-                <div className="pt-3 border-t">
-                  {!revokeConfirm ? (
-                    <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setRevokeConfirm(true)}>
-                      <Ban className="h-3 w-3 mr-1" />Revoke Application
-                    </Button>
+                {/* Subscriptions with keys */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium">API subscriptions</h4>
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/subscribe?appId=${detailApp.id}`)}><Plus className="h-3 w-3 mr-1" />Subscribe</Button>
+                  </div>
+                  {appSubscriptions(detailApp).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No subscriptions yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs text-destructive font-medium">This will immediately revoke all API access for this application. Active integrations will break.</p>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setRevokeConfirm(false)}>Cancel</Button>
-                        <Button size="sm" variant="destructive" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate({ id: detailApp.id })}>
-                          {revokeMutation.isPending ? "Revoking..." : "Confirm Revoke"}
-                        </Button>
-                      </div>
+                      {appSubscriptions(detailApp).map((sub: any) => (
+                        <div key={sub.id} className="rounded-lg border p-2.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{apiName(sub.apiId)}</span>
+                            <Badge variant="secondary" className={sub.status === "approved" ? "bg-emerald-100 text-emerald-700" : sub.status === "pending" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}>{sub.status}</Badge>
+                          </div>
+                          {sub.apiKey && (
+                            <div className="flex items-center gap-1.5">
+                              <KeyRound className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <code className="text-[11px] font-mono flex-1 break-all">{shownKeys[sub.id] ? sub.apiKey : `${String(sub.apiKey).slice(0, 8)}••••••••`}</code>
+                              <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]" onClick={() => setShownKeys(k => ({ ...k, [sub.id]: !k[sub.id] }))}>{shownKeys[sub.id] ? "Hide" : "Show"}</Button>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { navigator.clipboard.writeText(sub.apiKey); toast.success("Copied"); }}><Copy className="h-3 w-3" /></Button>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled={rotateKey.isPending} onClick={() => rotateKey.mutate({ id: sub.id })} title="Rotate key"><RefreshCw className={`h-3 w-3 ${rotateKey.isPending ? "animate-spin" : ""}`} /></Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+                {/* Revoke */}
+                {detailApp.status === "active" && (
+                  <div className="pt-3 border-t">
+                    {!revokeConfirm ? (
+                      <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setRevokeConfirm(true)}>
+                        <Ban className="h-3 w-3 mr-1" />Revoke application
+                      </Button>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-destructive font-medium">This revokes all API access for this application. Active integrations will break.</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setRevokeConfirm(false)}>Cancel</Button>
+                          <Button size="sm" variant="destructive" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate({ id: detailApp.id })}>
+                            {revokeMutation.isPending ? "Revoking..." : "Confirm revoke"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

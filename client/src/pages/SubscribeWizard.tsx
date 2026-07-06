@@ -18,7 +18,9 @@ const STEPS = ["API & plan", "Consumer app", "Subscribe"];
 export default function SubscribeWizard() {
   const [, navigate] = useLocation();
   const searchStr = useSearch();
-  const qsApiId = searchStr ? Number(new URLSearchParams(searchStr).get("apiId")) || 0 : 0;
+  const qs = searchStr ? new URLSearchParams(searchStr) : null;
+  const qsApiId = qs ? Number(qs.get("apiId")) || 0 : 0;
+  const qsAppId = qs ? qs.get("appId") || "" : "";
   const { effectiveTenantId, workspaceId, workspaces } = useTenantContext();
 
   const { data: status } = trpc.gateway.connectionStatus.useQuery();
@@ -32,7 +34,7 @@ export default function SubscribeWizard() {
   const [apiId, setApiId] = useState<number>(qsApiId);
   const [planId, setPlanId] = useState<number>(0);
   const [appMode, setAppMode] = useState<"existing" | "new">("existing");
-  const [appId, setAppId] = useState<string>("");
+  const [appId, setAppId] = useState<string>(qsAppId);
   const [newApp, setNewApp] = useState({ name: "", description: "" });
   const [result, setResult] = useState<null | { status: string; apiKey: string | null }>(null);
   const [submitting, setSubmitting] = useState(false);
