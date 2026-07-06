@@ -1064,6 +1064,37 @@ const analyticsRouter = router({
       : resolveEffectiveTenantId(ctx.user.role, ctx.user.tenantId ?? 0, input.tenantId);
     return db.getMeteringStats(tid, input.pipeline);
   }),
+  // Custom metric extraction rules (persisted; drive the metering pipeline)
+  extractionRules: tenantProcedure.query(async ({ ctx }) => {
+    return db.getMetricExtractionRules(ctx.tenantId);
+  }),
+  createExtractionRule: tenantProcedure.input(z.object({
+    name: z.string().min(1),
+    extractionPath: z.string().min(1),
+    extractionType: z.enum(["jsonpath", "header", "regex", "groovy"]).default("jsonpath"),
+    metricType: z.enum(["counter", "gauge", "histogram", "summary"]).default("counter"),
+    kafkaTopic: z.string().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const id = await db.createMetricExtractionRule({ ...input, tenantId: ctx.tenantId });
+    await db.createAuditEvent({ action: "metric_rule.created", actionType: "create", targetType: "metric_extraction_rule", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
+    return { id };
+  }),
+  updateExtractionRule: tenantProcedure.input(z.object({
+    id: z.number(),
+    enabled: z.boolean().optional(),
+    extractionPath: z.string().optional(),
+    extractionType: z.enum(["jsonpath", "header", "regex", "groovy"]).optional(),
+    metricType: z.enum(["counter", "gauge", "histogram", "summary"]).optional(),
+    kafkaTopic: z.string().optional(),
+  })).mutation(async ({ input }) => {
+    const { id, ...data } = input;
+    await db.updateMetricExtractionRule(id, data);
+    return { success: true };
+  }),
+  deleteExtractionRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteMetricExtractionRule(input.id);
+    return { success: true };
+  }),
   // Record a single API call (from Try It or gateway) into metering + usage_records
   recordCall: protectedProcedure.input(z.object({
     apiId: z.number(),

@@ -161,3 +161,47 @@ describe("rbac router validation", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("metric extraction rules", () => {
+  it("rejects rule creation with empty name", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.analytics.createExtractionRule({ name: "", extractionPath: "$.x" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects invalid extraction type", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.analytics.createExtractionRule({ name: "m", extractionPath: "$.x", extractionType: "xpath" as any })
+    ).rejects.toThrow();
+  });
+
+  it("persists a rule through create → list → update → delete", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const { id } = await caller.analytics.createExtractionRule({
+      name: "test_metric_" + Date.now(),
+      extractionPath: "$.response.body.count",
+      extractionType: "jsonpath",
+      metricType: "counter",
+      kafkaTopic: "test-topic",
+    });
+    try {
+      const rules = await caller.analytics.extractionRules();
+      const created = (rules as any[]).find((r) => r.id === id);
+      expect(created).toBeDefined();
+      expect(created.enabled).toBe(true);
+
+      await caller.analytics.updateExtractionRule({ id, enabled: false });
+      const afterToggle = (await caller.analytics.extractionRules() as any[]).find((r) => r.id === id);
+      expect(afterToggle.enabled).toBe(false);
+    } finally {
+      await caller.analytics.deleteExtractionRule({ id });
+      const afterDelete = (await caller.analytics.extractionRules() as any[]).find((r) => r.id === id);
+      expect(afterDelete).toBeUndefined();
+    }
+  });
+});

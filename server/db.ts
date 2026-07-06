@@ -6,7 +6,7 @@ import {
   users, tenants, workspaces, apis, plans, consumerApps, subscriptions,
   policies, auditEvents, invoices, usageRecords, supportTickets, incidents,
   complianceArtifacts, roles, roleAssignments, byokKeys, notifications,
-  meteringEvents, gatewayClusters, apiDeployments, developerPortals,
+  meteringEvents, metricExtractionRules, gatewayClusters, apiDeployments, developerPortals,
   maskingRules, dcrClients, identityProviders, apiEnvironments, alertRules,
   eventEntrypoints, policyChains, kafkaReporterConfigs,
   dpdpRequests, consentRecords, dataProcessingActivities,
@@ -638,6 +638,28 @@ export async function updateMaskingRule(id: number, data: Partial<typeof masking
 export async function deleteMaskingRule(id: number) {
   const db = getDb();
   await db.delete(maskingRules).where(eq(maskingRules.id, id));
+}
+
+// ─── Metric Extraction Rules ────────────────────────────────────────────────
+export async function getMetricExtractionRules(tenantId: number) {
+  const db = getDb();
+  return db.select().from(metricExtractionRules).where(eq(metricExtractionRules.tenantId, tenantId)).orderBy(desc(metricExtractionRules.createdAt));
+}
+
+export async function createMetricExtractionRule(data: typeof metricExtractionRules.$inferInsert) {
+  const db = getDb();
+  const result = await db.insert(metricExtractionRules).values(data).returning({ id: metricExtractionRules.id });
+  return result[0]?.id ?? null;
+}
+
+export async function updateMetricExtractionRule(id: number, data: Partial<typeof metricExtractionRules.$inferInsert>) {
+  const db = getDb();
+  await db.update(metricExtractionRules).set({ ...data, updatedAt: new Date() }).where(eq(metricExtractionRules.id, id));
+}
+
+export async function deleteMetricExtractionRule(id: number) {
+  const db = getDb();
+  await db.delete(metricExtractionRules).where(eq(metricExtractionRules.id, id));
 }
 
 // ─── DCR Clients ────────────────────────────────────────────────────────────

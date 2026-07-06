@@ -68,6 +68,9 @@ export const idpStatusEnum = pgEnum("idp_status", ["active", "inactive", "testin
 export const alertTypeEnum = pgEnum("alert_type", ["error_rate", "latency_p99", "quota_usage", "cert_expiry", "subscription_expiry", "custom"]);
 export const alertSeverityEnum = pgEnum("alert_severity", ["info", "warning", "critical"]);
 
+export const metricExtractionTypeEnum = pgEnum("metric_extraction_type", ["jsonpath", "header", "regex", "groovy"]);
+export const metricTypeEnum = pgEnum("metric_type", ["counter", "gauge", "histogram", "summary"]);
+
 export const entrypointTypeEnum = pgEnum("entrypoint_type", ["kafka", "mqtt", "rabbitmq", "webhook"]);
 export const entrypointAuthEnum = pgEnum("entrypoint_auth", ["none", "sasl_plain", "sasl_scram", "mtls", "api_key"]);
 export const entrypointStatusEnum = pgEnum("entrypoint_status", ["active", "inactive", "error"]);
@@ -497,6 +500,24 @@ export const meteringEvents = pgTable("metering_events", {
 ]);
 
 export type MeteringEvent = typeof meteringEvents.$inferSelect;
+
+// Custom metric extraction rules — how the metering pipeline pulls custom metrics off gateway events.
+export const metricExtractionRules = pgTable("metric_extraction_rules", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenantId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  extractionPath: varchar("extractionPath", { length: 512 }).notNull(),
+  extractionType: metricExtractionTypeEnum("extractionType").default("jsonpath").notNull(),
+  metricType: metricTypeEnum("metricType").default("counter").notNull(),
+  kafkaTopic: varchar("kafkaTopic", { length: 255 }),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index("metric_extraction_tenant_idx").on(t.tenantId),
+]);
+
+export type MetricExtractionRule = typeof metricExtractionRules.$inferSelect;
 
 // ─── Gateway Clusters ───────────────────────────────────────────────────────
 export const gatewayClusters = pgTable("gateway_clusters", {

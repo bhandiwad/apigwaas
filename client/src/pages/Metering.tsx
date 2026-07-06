@@ -10,22 +10,43 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Activity, ArrowRight, Plus, Zap, Radio, Database } from "lucide-react";
+import { Activity, ArrowRight, Plus, Zap, Radio, Database, Trash2 } from "lucide-react";
 
 export default function MeteringPage() {
   const { data: metering } = trpc.analytics.metering.useQuery({ pipeline: "customer_facing" });
   const { data: sifyMetering } = trpc.analytics.metering.useQuery({ pipeline: "sify_internal" });
+  const { data: rules, refetch: refetchRules } = trpc.analytics.extractionRules.useQuery();
 
   const lagoEvents = (metering as any[]) || [];
   const sifyEvents = (sifyMetering as any[]) || [];
   const lagoTotal = lagoEvents.length;
   const sifyTotal = sifyEvents.length;
+  const extractionRules = (rules as any[]) || [];
 
   const [metricOpen, setMetricOpen] = useState(false);
   const [metricName, setMetricName] = useState("");
   const [extractionPath, setExtractionPath] = useState("");
   const [extractionType, setExtractionType] = useState("jsonpath");
-  const [extractionRules, setExtractionRules] = useState<any[]>([]);
+  const [metricType, setMetricType] = useState("counter");
+  const [kafkaTopic, setKafkaTopic] = useState("");
+
+  const createRule = trpc.analytics.createExtractionRule.useMutation({
+    onSuccess: () => {
+      refetchRules();
+      setMetricOpen(false);
+      setMetricName(""); setExtractionPath(""); setExtractionType("jsonpath"); setMetricType("counter"); setKafkaTopic("");
+      toast.success("Extraction rule created");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateRule = trpc.analytics.updateExtractionRule.useMutation({
+    onSuccess: () => refetchRules(),
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteRule = trpc.analytics.deleteExtractionRule.useMutation({
+    onSuccess: () => { refetchRules(); toast.success("Rule deleted"); },
+    onError: (e) => toast.error(e.message),
+  });
 
   return (
     <div className="space-y-6">
@@ -93,7 +114,7 @@ export default function MeteringPage() {
                       </Select>
                     </div>
                     <div><Label>Metric Type</Label>
-                      <Select defaultValue="counter">
+                      <Select value={metricType} onValueChange={setMetricType}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="counter">Counter</SelectItem>
@@ -103,15 +124,10 @@ export default function MeteringPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div><Label>Target Kafka Topic</Label><Input placeholder="gravitee-metrics-custom" className="font-mono" /></div>
-                    <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!metricName} onClick={() => {
-                      const newRule = { id: Date.now(), name: metricName, path: extractionPath, type: extractionType, enabled: true };
-                      setExtractionRules(prev => [...prev, newRule]);
-                      setMetricOpen(false);
-                      setMetricName("");
-                      setExtractionPath("");
-                      toast.success("Extraction rule created");
-                    }}>Create Rule</Button>
+                    <div><Label>Target Kafka Topic</Label><Input value={kafkaTopic} onChange={e => setKafkaTopic(e.target.value)} placeholder="gravitee-metrics-custom" className="font-mono" /></div>
+                    <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" disabled={!metricName || !extractionPath || createRule.isPending} onClick={() => {
+                      createRule.mutate({ name: metricName, extractionPath, extractionType: extractionType as any, metricType: metricType as any, kafkaTopic: kafkaTopic || undefined });
+                    }}>{createRule.isPending ? "Creating…" : "Create Rule"}</Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -125,20 +141,24 @@ export default function MeteringPage() {
               ) : (
                 <div className="space-y-2">
                   {extractionRules.map(rule => (
-                    <div key={rule.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                    <div key={rule.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/40">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded flex items-center justify-center ${rule.enabled ? "bg-green-100" : "bg-gray-100"}`}>
-                          <Activity className={`w-4 h-4 ${rule.enabled ? "text-green-600" : "text-gray-400"}`} />
+                        <div className={`w-8 h-8 rounded flex items-center justify-center ${rule.enabled ? "bg-green-100" : "bg-muted"}`}>
+                          <Activity className={`w-4 h-4 ${rule.enabled ? "text-green-600" : "text-muted-foreground"}`} />
                         </div>
                         <div>
-                          <div className="font-medium text-sm font-mono">{rule.name}</div>
-                          <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{rule.path}</code>
+                          <div className="font-medium text-sm font-mono flex items-center gap-2">{rule.name}<Badge variant="outline" className="text-[10px] font-normal">{rule.metricType}</Badge></div>
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{rule.extractionType}: {rule.extractionPath}</code>
                         </div>
                       </div>
-                      <Switch checked={rule.enabled} onCheckedChange={checked => {
-                        setExtractionRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: checked } : r));
-                        toast.success(checked ? `Rule "${rule.name}" enabled` : `Rule "${rule.name}" disabled`);
-                      }} />
+                      <div className="flex items-center gap-3">
+                        <Switch checked={rule.enabled} disabled={updateRule.isPending} onCheckedChange={checked => {
+                          updateRule.mutate({ id: rule.id, enabled: checked });
+                        }} />
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" disabled={deleteRule.isPending} onClick={() => deleteRule.mutate({ id: rule.id })}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
