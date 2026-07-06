@@ -41,6 +41,22 @@ export default function AnalyticsPage() {
 
   const maxCalls = topApis[0]?.calls || 1;
 
+  // Daily buckets for the requests-over-time chart (last 14 days).
+  const dayMap = new Map<string, { calls: number; errors: number }>();
+  usageList.forEach((u: any) => {
+    if (!u.date) return;
+    const day = new Date(u.date).toISOString().slice(0, 10);
+    const e = dayMap.get(day) || { calls: 0, errors: 0 };
+    e.calls += u.apiCalls || 0;
+    e.errors += u.errorCount || 0;
+    dayMap.set(day, e);
+  });
+  const series = Array.from(dayMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-14)
+    .map(([day, v]) => ({ day, ...v }));
+  const maxDay = Math.max(1, ...series.map(s => s.calls));
+
   const simulateTraffic = trpc.analytics.simulateTraffic.useMutation({
     onSuccess: (data) => {
       toast.success(`Simulated ${data.inserted} API calls — metrics updating…`);
@@ -81,7 +97,7 @@ export default function AnalyticsPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase">Avg Latency P99</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase">Avg Latency</p>
                 <p className="text-2xl font-bold text-blue-600 mt-1">{avgLatency.toFixed(1)}ms</p>
                 <p className="text-xs text-muted-foreground mt-1">Across all endpoints</p>
               </div>
@@ -115,6 +131,35 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Requests over time */}
+      <Card className="border border-border/60">
+        <CardHeader className="pb-3"><CardTitle className="text-base">Requests over time</CardTitle></CardHeader>
+        <CardContent>
+          {series.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No traffic recorded yet. Use Simulate Traffic or send requests through the gateway to populate this chart.</p>
+          ) : (
+            <>
+              <div className="flex items-end gap-1.5 h-44" role="img" aria-label="Daily API requests over the last 14 days">
+                {series.map((s) => {
+                  const pct = Math.max(2, (s.calls / maxDay) * 100);
+                  return (
+                    <div key={s.day} className="flex-1 flex flex-col justify-end h-full group relative"
+                      title={`${s.day} — ${s.calls.toLocaleString()} calls, ${s.errors.toLocaleString()} errors`}>
+                      <div className="w-full rounded-t bg-primary/80 group-hover:bg-primary transition-colors" style={{ height: `${pct}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
+                <span>{series[0]?.day.slice(5)}</span>
+                <span>Peak {maxDay.toLocaleString()} calls/day</span>
+                <span>{series[series.length - 1]?.day.slice(5)}</span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top APIs */}
         <Card className="border border-border/60">
@@ -130,7 +175,7 @@ export default function AnalyticsPage() {
                       <span className="text-xs font-medium text-muted-foreground w-5">{i + 1}.</span>
                       <div>
                         <p className="text-sm font-medium">{api.name}</p>
-                        <p className="text-xs text-muted-foreground">P99: {api.latency}ms</p>
+                        <p className="text-xs text-muted-foreground">avg {api.latency}ms</p>
                       </div>
                     </div>
                     <div className="text-right">

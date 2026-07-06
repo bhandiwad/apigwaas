@@ -17,7 +17,7 @@ export default function SubscriptionsPage() {
   const { effectiveTenantId } = useTenantContext();
   const { data: subscriptions, isLoading, refetch } = trpc.subscription.list.useQuery({ tenantId: effectiveTenantId });
   const { data: consumerApps } = trpc.consumerApp.list.useQuery({ tenantId: effectiveTenantId });
-  const { data: apis } = trpc.api.list.useQuery({});
+  const { data: apis } = trpc.api.list.useQuery({ tenantId: effectiveTenantId });
 
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
   const [newSubKey, setNewSubKey] = useState<string | null>(null);
