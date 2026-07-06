@@ -324,30 +324,20 @@ export async function saveApiFlowsHybrid(apiId: number, flows: { phase: "request
   const localApi = await db.getApiById(apiId);
   if (!localApi) throw new Error(`API ${apiId} not found`);
 
-  // Always persist flows to local openApiSpec
+  // Persist the design flows to local openApiSpec, then recompose the full flow
+  // set (design + masking + IP filtering) and push it as one — the composer is
+  // the single writer, so saving Design no longer wipes masking/IP flows.
   const existing = (localApi as any).openApiSpec ?? {};
   await db.updateApi(apiId, { openApiSpec: { ...existing, policyFlows: flows } } as any);
 
-  const status = await getConnectionStatus();
-  if (status.mode === "live") {
-    const graviteeApiId = (localApi as any)?.graviteeApiId;
-    if (graviteeApiId) {
-      try {
-        // Map local flow format to Gravitee V4 flows
-        const graviteeFlows = flows.map(f => ({
-          enabled: true,
-          selectors: [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }],
-          [f.phase === "request" ? "request" : "response"]: [{ name: f.type, policy: f.type, enabled: true, configuration: f.config }],
-        }));
-        await gravitee.updateApiFlows(graviteeApiId, graviteeFlows);
-        return { saved: true, synced: true };
-      } catch (error) {
-        graviteeErrors.inc({ operation: "save_api_flows" });
-        logger.warn({ err: error }, "[GraviteeSync] Failed to sync API flows to Gravitee");
-      }
-    }
+  try {
+    const { synced } = await syncApiFlowsToGateway(apiId);
+    return { saved: true, synced };
+  } catch (error) {
+    graviteeErrors.inc({ operation: "save_api_flows" });
+    logger.warn({ err: error }, "[GraviteeSync] Failed to sync API flows to Gravitee");
+    return { saved: true, synced: false };
   }
-  return { saved: true, synced: false };
 }
 
 // ─── Gateway Policy Enforcement (data masking) ───────────────────────────────
@@ -436,12 +426,9 @@ export async function deployApiMaskingToGateway(apiId: number) {
     .filter((r: any) => (r.apiId === apiId || r.apiId == null)
       && r.enabled !== false && (r.phase === "response" || r.phase === "both"));
 
-  const api = await gravitee.getApi(graviteeApiId);
-  const existingFlows = ((api as any).flows || []).filter((f: any) => f.name !== MASKING_FLOW_NAME);
-  const flows = rules.length > 0 ? [...existingFlows, buildMaskingFlow(rules)] : existingFlows;
-
-  await gravitee.updateApi(graviteeApiId, { ...(api as any), flows });
-  await gravitee.deployApi(graviteeApiId);
+  // Masking rules already live in the DB — recompose the full flow set so we
+  // don't clobber Design or IP-filtering flows.
+  await syncApiFlowsToGateway(apiId);
   return { deployed: true, rules: rules.length };
 }
 
@@ -472,27 +459,74 @@ export async function deployApiIpFilteringToGateway(apiId: number) {
     if (c.mode === "allow") whitelistIps.push(...ips); else blacklistIps.push(...ips);
   }
 
-  const api = await gravitee.getApi(graviteeApiId);
-  const existingFlows = ((api as any).flows || []).filter((f: any) => f.name !== IP_FILTER_FLOW_NAME);
-  let flows = existingFlows;
-  if (whitelistIps.length > 0 || blacklistIps.length > 0) {
-    flows = [...existingFlows, {
-      name: IP_FILTER_FLOW_NAME,
-      enabled: true,
-      selectors: [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }],
-      request: [{
-        name: "IP Filtering",
-        enabled: true,
-        policy: "ip-filtering",
-        configuration: { matchAllFromXForwardedFor: false, whitelistIps, blacklistIps },
-      }],
-      response: [],
-    }];
-  }
+  // IP policies already live in the DB — recompose the full flow set.
+  await syncApiFlowsToGateway(apiId);
+  return { deployed: true, whitelist: whitelistIps.length, blacklist: blacklistIps.length };
+}
 
+// ─── Unified flow composition ────────────────────────────────────────────────
+// The Design editor, data masking, and IP filtering each contribute a named flow.
+// composeApiFlows rebuilds the API's COMPLETE flow set from every local source so
+// deploying one never wipes the others (they used to clobber each other).
+const DESIGN_FLOW_NAME = "cloudinfinit-design";
+const HTTP_SELECTOR = [{ type: "HTTP", path: "/", pathOperator: "STARTS_WITH", methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] }];
+
+function buildDesignFlow(policyFlows: any[]) {
+  const request = policyFlows.filter(f => f.phase === "request").map(f => ({ name: f.type, policy: f.type, enabled: true, configuration: f.config }));
+  const response = policyFlows.filter(f => f.phase === "response").map(f => ({ name: f.type, policy: f.type, enabled: true, configuration: f.config }));
+  if (request.length === 0 && response.length === 0) return null;
+  return { name: DESIGN_FLOW_NAME, enabled: true, selectors: HTTP_SELECTOR, request, response };
+}
+
+function buildIpFilteringFlow(policies: any[]) {
+  const whitelistIps: string[] = [];
+  const blacklistIps: string[] = [];
+  for (const p of policies) {
+    const c = (p as any).configuration || {};
+    const ips: string[] = Array.isArray(c.ips) ? c.ips.filter(Boolean) : [];
+    if (c.mode === "allow") whitelistIps.push(...ips); else blacklistIps.push(...ips);
+  }
+  if (whitelistIps.length === 0 && blacklistIps.length === 0) return null;
+  return {
+    name: IP_FILTER_FLOW_NAME, enabled: true, selectors: HTTP_SELECTOR,
+    request: [{ name: "IP Filtering", enabled: true, policy: "ip-filtering", configuration: { matchAllFromXForwardedFor: false, whitelistIps, blacklistIps } }],
+    response: [],
+  };
+}
+
+async function composeApiFlows(apiId: number): Promise<any[]> {
+  const localApi = await db.getApiById(apiId);
+  const tenantId = (localApi as any)?.tenantId;
+  const flows: any[] = [];
+
+  const design = buildDesignFlow((localApi as any)?.openApiSpec?.policyFlows ?? []);
+  if (design) flows.push(design);
+
+  const maskRules = (await db.getMaskingRules(tenantId))
+    .filter((r: any) => (r.apiId === apiId || r.apiId == null) && r.enabled !== false && (r.phase === "response" || r.phase === "both"));
+  if (maskRules.length) flows.push(buildMaskingFlow(maskRules));
+
+  const ipPolicies = (await db.getPoliciesByTenant(tenantId))
+    .filter((p: any) => p.type === "ip_filtering" && p.enabled !== false)
+    .filter((p: any) => { const c = (p as any).configuration || {}; return c.apiId === apiId || c.apiId == null; });
+  const ipFlow = buildIpFilteringFlow(ipPolicies);
+  if (ipFlow) flows.push(ipFlow);
+
+  return flows;
+}
+
+// Recompose and push the full flow set to Gravitee, then deploy. No-op if the API
+// isn't synced or Gravitee is offline. This is the single writer of API flows.
+export async function syncApiFlowsToGateway(apiId: number): Promise<{ synced: boolean; flowCount: number }> {
+  const status = await getConnectionStatus();
+  const localApi = await db.getApiById(apiId);
+  const graviteeApiId = (localApi as any)?.graviteeApiId;
+  if (status.mode !== "live" || !graviteeApiId) return { synced: false, flowCount: 0 };
+  const flows = await composeApiFlows(apiId);
+  const api = await gravitee.getApi(graviteeApiId);
   await gravitee.updateApi(graviteeApiId, { ...(api as any), flows });
   await gravitee.deployApi(graviteeApiId);
-  return { deployed: true, whitelist: whitelistIps.length, blacklist: blacklistIps.length };
+  return { synced: true, flowCount: flows.length };
 }
 
 // ─── Gateway Instances Sync ──────────────────────────────────────────────────
