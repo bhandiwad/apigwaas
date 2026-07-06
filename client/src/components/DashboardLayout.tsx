@@ -88,6 +88,7 @@ const menuSections: MenuSection[] = [
     defaultOpen: true,
     items: [
       { icon: Globe, label: "APIs", path: "/apis" },
+      { icon: Activity, label: "API Lifecycle", path: "/api-lifecycle" },
       { icon: BookOpen, label: "Plans", path: "/plans" },
       { icon: Zap, label: "Consumer Apps", path: "/consumer-apps" },
       { icon: Key, label: "Subscriptions", path: "/subscriptions" },
@@ -100,6 +101,7 @@ const menuSections: MenuSection[] = [
       { icon: Server, label: "Clusters", path: "/gateway-clusters" },
       { icon: Rocket, label: "Deployments", path: "/deployments" },
       { icon: GitBranch, label: "Environments", path: "/environments" },
+      { icon: GitBranch, label: "GitOps Pipeline", path: "/gitops-pipeline" },
     ],
   },
   {
@@ -108,6 +110,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: Shield, label: "Policies", path: "/policies" },
       { icon: EyeOff, label: "Data Masking", path: "/data-masking" },
+      { icon: Key, label: "Vault Secrets", path: "/vault-secrets" },
       { icon: Fingerprint, label: "Identity Providers", path: "/identity-providers" },
     ],
   },
@@ -119,6 +122,7 @@ const menuSections: MenuSection[] = [
       { icon: Activity, label: "Metering", path: "/metering" },
       { icon: Bell, label: "Alerts", path: "/alerts" },
       { icon: FileText, label: "Audit Trail", path: "/audit" },
+      { icon: FileText, label: "Logs", path: "/logs" },
     ],
   },
   {
@@ -128,6 +132,12 @@ const menuSections: MenuSection[] = [
       { icon: CreditCard, label: "Billing", path: "/billing" },
       { icon: Key, label: "Compliance", path: "/compliance" },
       { icon: Users, label: "Roles & Access", path: "/rbac" },
+      { icon: Shield, label: "Role Assignments", path: "/role-assignments" },
+      { icon: Globe, label: "Dev Portal", path: "/dev-portal" },
+      { icon: Server, label: "Status", path: "/status" },
+      { icon: Activity, label: "SRE Dashboard", path: "/sre" },
+      { icon: Building2, label: "Tenant Lifecycle", path: "/tenant-lifecycle" },
+      { icon: AlertTriangle, label: "Support", path: "/support" },
     ],
   },
 ];
@@ -389,6 +399,12 @@ function DashboardLayoutContent({
     window.localStorage.setItem("ci.navSections", JSON.stringify(next));
     return next;
   });
+
+  // Pending-subscription count for the Subscriptions nav badge.
+  const { effectiveTenantId } = useTenantContext();
+  const { data: subsData } = trpc.subscription.list.useQuery({ tenantId: effectiveTenantId }, { refetchInterval: 60_000 });
+  const pendingSubs = ((subsData as any)?.data ?? []).filter((s: any) => s.status === "pending").length;
+
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -482,6 +498,9 @@ function DashboardLayoutContent({
                             }`}
                           />
                           <span>{item.label}</span>
+                          {item.path === "/subscriptions" && pendingSubs > 0 && (
+                            <Badge className="ml-auto h-5 min-w-5 justify-center px-1 bg-amber-500 text-white text-[10px]">{pendingSubs}</Badge>
+                          )}
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );

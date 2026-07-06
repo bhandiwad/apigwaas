@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Globe, Plus, Search, Upload, FileJson, ChevronRight } from "lucide-react";
+import { Globe, Plus, Search, Upload, FileJson, ChevronRight, Copy } from "lucide-react";
+import { SyncBadge } from "@/components/SyncBadge";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
@@ -33,9 +34,16 @@ export default function ApisPage() {
   const [importMode, setImportMode] = useState<"file" | "url">("file");
   const [importUrl, setImportUrl] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
   const [importSpec, setImportSpec] = useState("");
 
-  const filtered = (apis ?? []).filter((a) => a.name.toLowerCase().includes(search.toLowerCase()));
+  const apiRows = (apis ?? []) as any[];
+  const protocolsPresent = Array.from(new Set(apiRows.map(a => a.protocol)));
+  const filtered = apiRows.filter((a) =>
+    a.name.toLowerCase().includes(search.toLowerCase())
+    && (!statusFilter || a.status === statusFilter)
+    && (!protocolFilter || a.protocol === protocolFilter));
   const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-700", published: "bg-emerald-100 text-emerald-700", deprecated: "bg-amber-100 text-amber-700", retired: "bg-red-100 text-red-700" };
   const protocolColors: Record<string, string> = { rest: "bg-blue-100 text-blue-700", graphql: "bg-pink-100 text-pink-700", grpc: "bg-purple-100 text-purple-700", websocket: "bg-orange-100 text-orange-700", kafka: "bg-teal-100 text-teal-700", mqtt: "bg-cyan-100 text-cyan-700" };
 
@@ -125,9 +133,21 @@ export default function ApisPage() {
         </div>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search APIs..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search APIs..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {["draft", "published", "deprecated", "retired"].map(s => (
+            <button key={s} onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+              className={`text-xs px-2.5 py-1 rounded-full border capitalize transition-colors ${statusFilter === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>{s}</button>
+          ))}
+          {protocolsPresent.length > 1 && protocolsPresent.map(p => (
+            <button key={p} onClick={() => setProtocolFilter(protocolFilter === p ? null : p)}
+              className={`text-xs px-2.5 py-1 rounded-full border uppercase transition-colors ${protocolFilter === p ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>{p}</button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
@@ -145,8 +165,17 @@ export default function ApisPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-sm">{api.name}</h3>
                       <span className="text-xs text-muted-foreground">v{api.version}</span>
+                      <SyncBadge status={api.syncStatus} />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{api.contextPath || api.backendUrl || "No endpoint configured"}</p>
+                    {api.contextPath ? (
+                      <div className="group/cp flex items-center gap-1 mt-0.5">
+                        <code className="text-xs font-mono text-muted-foreground">{api.contextPath}</code>
+                        <Copy className="h-3 w-3 text-muted-foreground/50 opacity-0 group-hover/cp:opacity-100 cursor-pointer hover:text-foreground"
+                          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(api.contextPath); toast.success("Context path copied"); }} />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-0.5">{api.backendUrl || "No endpoint configured"}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

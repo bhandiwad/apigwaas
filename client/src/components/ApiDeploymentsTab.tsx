@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SyncBadge } from "@/components/SyncBadge";
 import { Rocket } from "lucide-react";
 
 export function ApiDeploymentsTab({ apiId }: { apiId: number }) {
@@ -30,7 +31,7 @@ export function ApiDeploymentsTab({ apiId }: { apiId: number }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {d.syncSource && <Badge variant="outline" className="text-[10px]">{d.syncSource === "gravitee" ? "Gravitee" : "Local"}</Badge>}
+              <SyncBadge status={d.syncSource === "gravitee" ? "synced" : "local_only"} />
               <Badge className={tone(d.status)}>{d.status}</Badge>
             </div>
           </CardContent>

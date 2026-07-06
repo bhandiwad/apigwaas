@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, KeyRound } from "lucide-react";
+import { SyncBadge } from "@/components/SyncBadge";
 import { toast } from "sonner";
 
 export function ApiPlansTab({ apiId }: { apiId: number }) {
@@ -60,6 +61,7 @@ export function ApiPlansTab({ apiId }: { apiId: number }) {
               <p className="text-xs text-muted-foreground">{p.rateLimit}/{p.rateLimitPeriod ?? "min"} · {p.quotaLimit}/{p.quotaPeriod ?? "month"}{typeof p.subscriptionCount === "number" ? ` · ${p.subscriptionCount} subs` : ""}</p>
             </div>
             <div className="flex items-center gap-2">
+              <SyncBadge status={p.graviteeApiId ? "synced" : "local_only"} />
               <Badge className={tone(p.status)}>{p.status}</Badge>
               {p.status !== "closed" && <Button size="sm" variant="outline" disabled={update.isPending} onClick={() => update.mutate({ id: p.id, status: "closed" })}>Close</Button>}
             </div>
