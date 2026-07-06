@@ -180,7 +180,7 @@
 ## Automated Deployment & Gravitee Management
 - [x] Terraform modules for Kubernetes cluster provisioning (AWS EKS)
 - [x] Terraform modules for supporting infrastructure (VPC, subnets, NAT, security groups)
-- [x] Terraform modules for database provisioning (RDS MySQL, DocumentDB, ElastiCache, OpenSearch)
+- [x] Terraform modules for database provisioning (RDS PostgreSQL, DocumentDB, ElastiCache, OpenSearch)
 - [x] Helm chart for Gravitee APIM deployment (gateway, management API, portal, console)
 - [x] Helm chart for CloudInfinit platform deployment
 - [x] Helm values files for multi-environment (staging, production)
@@ -195,7 +195,7 @@
 
 ## Automated Deployment & Gravitee Management (Dockerized, Production-Grade)
 - [x] Multi-stage Dockerfile for CloudInfinit platform (Node.js app)
-- [x] Docker Compose stack (platform + Gravitee APIM + MySQL + MongoDB + Elasticsearch + Redis + Nginx)
+- [x] Docker Compose stack (platform + Gravitee APIM + PostgreSQL + MongoDB + Elasticsearch + Redis + Nginx)
 - [x] Docker Compose for local development with hot-reload
 - [x] Gravitee APIM Docker configuration (gateway, management-api, portal-ui, console-ui)
 - [x] Helm chart for Gravitee APIM (gateway, mgmt-api, portal, console)
@@ -203,7 +203,7 @@
 - [x] Helm values for multi-environment (staging, production)
 - [x] Terraform module: Kubernetes cluster (AWS EKS)
 - [x] Terraform module: VPC, subnets, NAT, security groups
-- [x] Terraform module: Database (RDS MySQL, DocumentDB)
+- [x] Terraform module: Database (RDS PostgreSQL, DocumentDB)
 - [x] Terraform module: Elasticsearch/OpenSearch
 - [x] Terraform module: Redis (ElastiCache)
 - [x] Terraform module: S3 buckets (audit, backups, assets)

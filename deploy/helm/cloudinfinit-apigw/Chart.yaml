@@ -13,10 +13,10 @@ maintainers:
   - name: CloudInfinit
     email: platform@cloudinfinit.io
 dependencies:
-  - name: mysql
-    version: "9.x.x"
+  - name: postgresql
+    version: "15.x.x"
     repository: "https://charts.bitnami.com/bitnami"
-    condition: mysql.enabled
+    condition: postgresql.enabled
   - name: redis
     version: "18.x.x"
     repository: "https://charts.bitnami.com/bitnami"

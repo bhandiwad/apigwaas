@@ -195,7 +195,7 @@ helm upgrade --install cloudinfinit-apigw deploy/helm/cloudinfinit-apigw \
     └─────────┘         └─────────┘         └─────────┘
 ```
 
-> ⚠️ **The platform database must be PostgreSQL** (the app uses `pg`/Drizzle with a `postgresql` dialect). The Docker Compose stack already provisions Postgres 16. The Terraform RDS module (`deploy/terraform/modules/rds`) **currently provisions MySQL 8.0** and must be changed to `engine = "postgres"` (parameter-group family `postgres16`, port `5432`) before cloud deployment. See the note under [What Gets Created](#what-gets-created).
+> **The platform database is PostgreSQL** (the app uses `pg`/Drizzle with a `postgresql` dialect). Docker Compose provisions Postgres 16, and the Terraform RDS module (`deploy/terraform/modules/rds`) provisions `engine = "postgres"` (family `postgres16`, port `5432`).
 
 ### Scaling
 
@@ -235,7 +235,7 @@ Terraform modules provision the complete AWS infrastructure with production-grad
 | OpenSearch | `modules/opensearch` | Gravitee analytics, logging | 3-node cluster |
 | S3 Buckets | `modules/s3` | Audit logs, backups, assets | Cross-region |
 
-> ⚠️ **Known IaC fix required:** the `modules/rds` source currently sets `engine = "mysql"` / `engine_version = "8.0"`. The platform requires **PostgreSQL**, so this module must be switched to `engine = "postgres"` (e.g. `engine_version = "16"`, `family = "postgres16"`, port `5432`) and the `DATABASE_URL` updated to a `postgresql://` string. The Docker Compose stack is already on Postgres 16; only the Terraform module lags.
+> **Note:** the `modules/rds` module provisions `engine = "postgres"` (`engine_version = "16"`, parameter-group family `postgres16`, port `5432`). Ensure any `DATABASE_URL` you supply uses a `postgresql://` connection string.
 
 ### Provisioning Steps
 

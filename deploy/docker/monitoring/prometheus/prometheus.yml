@@ -55,10 +55,10 @@ scrape_configs:
     static_configs:
       - targets: ['redis:6379']
 
-  # MySQL metrics (via mysqld_exporter if added)
-  - job_name: 'mysql'
+  # PostgreSQL metrics (via postgres_exporter if added)
+  - job_name: 'postgres'
     static_configs:
-      - targets: ['mysql:3306']
+      - targets: ['postgres:5432']
 
   # Nginx metrics (via nginx stub_status)
   - job_name: 'nginx'

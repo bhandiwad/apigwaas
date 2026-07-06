@@ -422,7 +422,7 @@ pnpm start
 | Database | **PostgreSQL 16** with TLS |
 | Network | Outbound HTTPS to the Gravitee Management API |
 
-> ⚠️ **Known infra inconsistency:** the Docker Compose stack correctly provisions **PostgreSQL 16**, but the Terraform RDS module (`deploy/terraform/modules/rds`) currently provisions **MySQL 8.0**. Since the platform requires PostgreSQL, the Terraform RDS engine must be switched to `postgres` (with the matching parameter-group family and port 5432) before cloud deployment. This is tracked as an IaC fix.
+> The platform database is **PostgreSQL 16** end-to-end: the Docker Compose stack, the Terraform RDS module (`deploy/terraform/modules/rds`, `engine = "postgres"`, family `postgres16`, port 5432), and the Helm `postgresql` subchart all provision Postgres.
 
 ---
 

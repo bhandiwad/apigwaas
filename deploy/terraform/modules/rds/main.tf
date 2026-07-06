@@ -1,5 +1,5 @@
 # ============================================================================
-# RDS Module - MySQL Platform Database
+# RDS Module - PostgreSQL Platform Database
 # ============================================================================
 
 resource "aws_db_subnet_group" "main" {
@@ -16,8 +16,8 @@ resource "aws_security_group" "rds" {
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port       = 3306
-    to_port         = 3306
+    from_port       = 5432
+    to_port         = 5432
     protocol        = "tcp"
     security_groups = [var.eks_security_group]
   }
@@ -28,10 +28,10 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_instance" "main" {
-  identifier = "${var.project_name}-${var.environment}-mysql"
+  identifier = "${var.project_name}-${var.environment}-postgres"
 
-  engine         = "mysql"
-  engine_version = "8.0"
+  engine         = "postgres"
+  engine_version = "16"
   instance_class = var.instance_class
 
   allocated_storage     = var.allocated_storage
@@ -62,37 +62,24 @@ resource "aws_db_instance" "main" {
   parameter_group_name = aws_db_parameter_group.main.name
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-mysql"
+    Name = "${var.project_name}-${var.environment}-postgres"
   }
 }
 
 resource "aws_db_parameter_group" "main" {
-  name   = "${var.project_name}-${var.environment}-mysql-params"
-  family = "mysql8.0"
+  name   = "${var.project_name}-${var.environment}-postgres-params"
+  family = "postgres16"
 
   parameter {
-    name  = "character_set_server"
-    value = "utf8mb4"
+    name         = "max_connections"
+    value        = "500"
+    apply_method = "pending-reboot"
   }
 
+  # Log statements slower than 2s (PostgreSQL equivalent of slow_query_log)
   parameter {
-    name  = "collation_server"
-    value = "utf8mb4_unicode_ci"
-  }
-
-  parameter {
-    name  = "max_connections"
-    value = "500"
-  }
-
-  parameter {
-    name  = "slow_query_log"
-    value = "1"
-  }
-
-  parameter {
-    name  = "long_query_time"
-    value = "2"
+    name  = "log_min_duration_statement"
+    value = "2000"
   }
 }
 

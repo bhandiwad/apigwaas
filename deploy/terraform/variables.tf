@@ -91,7 +91,7 @@ variable "node_groups" {
 }
 
 variable "rds_instance_class" {
-  description = "RDS instance class for MySQL"
+  description = "RDS instance class for PostgreSQL"
   type        = string
   default     = "db.r5.large"
 }

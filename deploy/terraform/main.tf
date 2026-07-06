@@ -77,7 +77,7 @@ module "eks" {
   depends_on = [module.vpc]
 }
 
-# ─── RDS MySQL (Platform Database) ───────────────────────────────────────────
+# ─── RDS PostgreSQL (Platform Database) ──────────────────────────────────────
 
 module "rds" {
   source = "./modules/rds"

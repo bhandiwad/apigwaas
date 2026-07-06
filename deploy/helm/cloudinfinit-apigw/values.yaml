@@ -113,15 +113,14 @@ ingress:
       hosts:
         - apigw.cloudinfinit.io
 
-# -- MySQL (Platform DB)
-mysql:
+# -- PostgreSQL (Platform DB)
+postgresql:
   enabled: true
   auth:
-    rootPassword: ""
     database: cloudinfinit_apigw
     username: cloudinfinit
     password: ""
-    existingSecret: mysql-secrets
+    existingSecret: postgres-secrets
   primary:
     resources:
       requests:

@@ -1,6 +1,6 @@
 # ============================================================================
 # CloudInfinit API Gateway - Full Stack Docker Compose
-# Includes: Platform App + Gravitee APIM + MySQL + MongoDB + Elasticsearch + Redis + Nginx
+# Includes: Platform App + Gravitee APIM + PostgreSQL + MongoDB + Elasticsearch + Redis + Nginx
 # ============================================================================
 
 version: "3.9"
