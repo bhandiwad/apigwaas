@@ -14,6 +14,7 @@ import { ApiDesignTab } from "@/components/ApiDesignTab";
 import { ApiPlansTab } from "@/components/ApiPlansTab";
 import { ApiTestTab } from "@/components/ApiTestTab";
 import { ApiDeploymentsTab } from "@/components/ApiDeploymentsTab";
+import { ApiPortalTab } from "@/components/ApiPortalTab";
 import { ArrowLeft, Globe, Shield, Activity, Code, Server, Clock, Plus, Pencil } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -168,6 +169,7 @@ export default function ApiDetailPage() {
             <TabsTrigger value="plans">Plans</TabsTrigger>
             <TabsTrigger value="test">Test</TabsTrigger>
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
+            <TabsTrigger value="portal">Portal</TabsTrigger>
             <TabsTrigger value="spec">Specification</TabsTrigger>
           </TabsList>
         </div>
@@ -221,6 +223,10 @@ export default function ApiDetailPage() {
 
         <TabsContent value="deployments">
           <ApiDeploymentsTab apiId={apiId} />
+        </TabsContent>
+
+        <TabsContent value="portal">
+          <ApiPortalTab apiId={apiId} api={api} />
         </TabsContent>
 
         <TabsContent value="spec" className="space-y-4 mt-4">
