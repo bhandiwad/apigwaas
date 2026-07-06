@@ -1,428 +1,232 @@
-import { useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useTenantContext } from "@/contexts/TenantContext";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import {
-  ArrowRight, FileEdit, Rocket, AlertTriangle, Archive,
-  Settings2, TestTube2, Eye, GitBranch, Bell, Lock, RefreshCw, ExternalLink
+  FileEdit, Rocket, AlertTriangle, Archive, Check, X, Copy,
+  Settings2, TestTube2, Shield, BarChart3, ArrowRight, RotateCcw, Loader2,
 } from "lucide-react";
 
-const LIFECYCLE_STATES = [
-  { key: "draft",      label: "Draft",      icon: FileEdit,       color: "bg-gray-100 text-gray-700 border-gray-300",    description: "Being designed and configured" },
-  { key: "published",  label: "Published",  icon: Rocket,         color: "bg-emerald-100 text-emerald-700 border-emerald-300", description: "Live and accepting traffic" },
-  { key: "deprecated", label: "Deprecated", icon: AlertTriangle,  color: "bg-amber-100 text-amber-700 border-amber-300", description: "Marked for sunset — consumers should migrate" },
-  { key: "retired",    label: "Retired",    icon: Archive,        color: "bg-red-100 text-red-700 border-red-300",       description: "No longer accessible" },
+type StageKey = "draft" | "published" | "deprecated" | "retired";
+const STAGES: { key: StageKey; label: string; icon: any; blurb: string }[] = [
+  { key: "draft", label: "Draft", icon: FileEdit, blurb: "Being designed and configured." },
+  { key: "published", label: "Published", icon: Rocket, blurb: "Live on the gateway and accepting traffic." },
+  { key: "deprecated", label: "Deprecated", icon: AlertTriangle, blurb: "Marked for sunset — consumers should migrate. Still callable." },
+  { key: "retired", label: "Retired", icon: Archive, blurb: "Taken out of active use." },
 ];
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft:      ["published"],
-  published:  ["deprecated"],
-  deprecated: ["published", "retired"],
-  retired:    [],
-};
-
-// Extra per-state actions that don't change lifecycle state
-const STATE_ACTIONS: Record<string, { icon: any; label: string; action: string }[]> = {
-  draft: [
-    { icon: Settings2,  label: "Configure Gateway",   action: "configure" },
-    { icon: TestTube2,  label: "Test Endpoint",        action: "test" },
-    { icon: Lock,       label: "Attach Policy",        action: "policy" },
-    { icon: GitBranch,  label: "Create Version",       action: "version" },
-  ],
-  published: [
-    { icon: Settings2,  label: "Edit Configuration",  action: "configure" },
-    { icon: TestTube2,  label: "Test Endpoint",        action: "test" },
-    { icon: Eye,        label: "View Metrics",         action: "metrics" },
-    { icon: Bell,       label: "Set Deprecation Notice", action: "deprecation_notice" },
-    { icon: GitBranch,  label: "Create New Version",   action: "new_version" },
-    { icon: Lock,       label: "Manage Policies",      action: "policy" },
-    { icon: ExternalLink, label: "Open in Gateway",   action: "gateway" },
-  ],
-  deprecated: [
-    { icon: Eye,        label: "Migration Report",     action: "migration" },
-    { icon: Bell,       label: "Notify Consumers",     action: "notify" },
-  ],
-  retired: [
-    { icon: GitBranch,  label: "Reactivate as Draft",  action: "reactivate" },
-  ],
-};
+const STAGE_INDEX: Record<StageKey, number> = { draft: 0, published: 1, deprecated: 2, retired: 3 };
 
 export default function ApiLifecycle() {
   const [, navigate] = useLocation();
-  const { data: apis, refetch } = trpc.api.list.useQuery({});
-  const { data: workspaces } = trpc.workspace.list.useQuery(undefined);
-  const updateApi = trpc.api.update.useMutation({
-    onSuccess: () => { refetch(); toast.success("API lifecycle state updated"); },
+  const { workspaceId, effectiveTenantId } = useTenantContext();
+  const utils = trpc.useUtils();
+  const { data: apis } = trpc.api.list.useQuery({ workspaceId: workspaceId ?? undefined, tenantId: effectiveTenantId });
+  const { data: status } = trpc.gateway.connectionStatus.useQuery();
+  const gatewayBase = ((status as any)?.gatewayBaseUrl || "http://localhost:8082").replace(/\/$/, "");
+
+  const apiList = (apis ?? []) as any[];
+  const [selectedId, setSelectedId] = useState<string>("");
+  useEffect(() => {
+    if (!selectedId && apiList.length > 0) setSelectedId(String(apiList[0].id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiList.length]);
+  const api = apiList.find(a => String(a.id) === selectedId);
+  const apiId = api?.id as number | undefined;
+
+  const { data: plans } = trpc.plan.list.useQuery({ apiId: apiId! }, { enabled: !!apiId });
+  const planList = (plans ?? []) as any[];
+
+  const [confirm, setConfirm] = useState<StageKey | null>(null);
+  const [retireText, setRetireText] = useState("");
+  const update = trpc.api.update.useMutation({
+    onSuccess: (_, vars) => {
+      utils.api.list.invalidate();
+      const msg: Record<string, string> = { published: "API published", deprecated: "API deprecated", retired: "API retired", draft: "API reactivated as draft" };
+      toast.success(msg[String(vars.status)] ?? "Updated");
+    },
     onError: (e) => toast.error(e.message),
   });
-  const createApi = trpc.api.create.useMutation({
-    onSuccess: () => { refetch(); toast.success("New draft version created"); setNewVersionApi(null); },
-    onError: (e) => toast.error(e.message),
-  });
 
-  const proxyTest = trpc.api.proxyTest.useMutation();
+  const stage = (api?.status ?? "draft") as StageKey;
+  const currentIdx = STAGE_INDEX[stage];
 
-  const [configApi, setConfigApi] = useState<any | null>(null);
-  const [testApi, setTestApi]     = useState<any | null>(null);
-  const [testPath, setTestPath]   = useState("/");
-  const [testQueryString, setTestQueryString] = useState("");
-  const [testResult, setTestResult] = useState<any | null>(null);
-  const [testLoading, setTestLoading] = useState(false);
-  const [noticeApi, setNoticeApi] = useState<any | null>(null);
-  const [noticeText, setNoticeText] = useState("");
+  // Draft → publish readiness.
+  const checklist = useMemo(() => [
+    { ok: !!api?.backendUrl, label: "Backend URL configured", hint: "Required so the gateway knows where to route." },
+    { ok: !!api?.contextPath, label: "Context path set", hint: "The gateway route, e.g. /payments/v1." },
+    { ok: planList.length > 0, label: `${planList.length || "No"} plan${planList.length === 1 ? "" : "s"}`, hint: "Optional — a keyless plan is created on publish if none exist.", optional: true },
+  ], [api?.backendUrl, api?.contextPath, planList.length]);
+  const canPublish = !!api?.backendUrl && !!api?.contextPath;
 
-  const [gwConfig, setGwConfig] = useState({ timeout: "30000", rateLimit: "1000", rateLimitPeriod: "MINUTES", contextPath: "" });
-  const [newVersionApi, setNewVersionApi] = useState<any | null>(null);
-  const [newVersion, setNewVersion] = useState("");
+  const gatewayUrl = api?.contextPath ? `${gatewayBase}${String(api.contextPath).replace(/\/$/, "")}` : null;
 
-  function handleAction(api: any, action: string) {
-    switch (action) {
-      case "configure":    setGwConfig({ timeout: "30000", rateLimit: "1000", rateLimitPeriod: "MINUTES", contextPath: api.contextPath || "" }); setConfigApi(api); break;
-      case "test":         setTestApi(api); setTestResult(null); setTestPath("/"); setTestQueryString(""); break;
-      case "policy":       navigate(`/policies?apiId=${api.id}`); break;
-      case "metrics":      navigate(`/analytics?apiId=${api.id}`); break;
-      case "deprecation_notice": setNoticeApi(api); setNoticeText(""); break;
-      case "notify":       toast.info("Consumer notification queued"); break;
-      case "migration":    toast.info("Migration report: " + (api.name || "API") + " — no active subscriptions"); break;
-      case "reactivate":   updateApi.mutate({ id: api.id, status: "draft" }); break;
-      case "gateway":      window.open(`http://localhost:8082${api.contextPath || "/"}`, "_blank"); break;
-      case "rollback":     toast.info("No previous version to rollback to"); break;
-      case "version":      toast.info("Version branching — use GitOps pipeline for multi-version promotion"); break;
-      case "new_version":  {
-        const cur = api.version || "1.0.0";
-        const parts = cur.replace(/^v/, "").split(".");
-        const next = `v${parseInt(parts[0] || "1") + 1}.0`;
-        setNewVersion(next);
-        setNewVersionApi(api);
-        break;
-      }
-    }
+  function doTransition(target: StageKey) {
+    if (!apiId) return;
+    update.mutate({ id: apiId, status: target });
+    setConfirm(null);
   }
 
-  async function runTest() {
-    if (!testApi) return;
-    setTestLoading(true);
-    setTestResult(null);
-    try {
-      const result = await proxyTest.mutateAsync({
-        apiId: testApi.id,
-        path: testPath || "/",
-        queryString: testQueryString || undefined,
-        method: "GET",
-      });
-      setTestResult(result);
-    } finally {
-      setTestLoading(false);
-    }
-  }
-
-  const getStateInfo = (status: string) => LIFECYCLE_STATES.find(s => s.key === status) || LIFECYCLE_STATES[0];
+  const secondary = [
+    { icon: Settings2, label: "Configure", to: `/apis/${apiId}` },
+    { icon: TestTube2, label: "Test", to: `/apis/${apiId}?tab=test` },
+    { icon: Shield, label: "Policies", to: `/apis/${apiId}?tab=design` },
+    { icon: BarChart3, label: "Analytics", to: `/analytics?apiId=${apiId}` },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold">API Lifecycle</h1>
-        <p className="text-muted-foreground text-sm">Manage state transitions, gateway configuration, testing, and deprecation</p>
+        <h1 className="text-2xl font-bold tracking-tight">API Lifecycle</h1>
+        <p className="text-muted-foreground text-sm mt-1">Walk an API from draft to retirement, one guided step at a time.</p>
       </div>
 
-      {/* State machine diagram */}
       <Card>
-        <CardContent className="pt-5">
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            {LIFECYCLE_STATES.map((state, idx) => (
-              <div key={state.key} className="flex items-center gap-2">
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 ${state.color}`}>
-                  <state.icon className="w-4 h-4" />
-                  <span className="font-medium text-sm">{state.label}</span>
-                </div>
-                {idx < LIFECYCLE_STATES.length - 1 && <ArrowRight className="w-4 h-4 text-muted-foreground" />}
-              </div>
-            ))}
-          </div>
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            Deprecated can revert to Published before retiring
-          </p>
+        <CardContent className="pt-4">
+          <Select value={selectedId} onValueChange={v => { setSelectedId(v); setConfirm(null); }}>
+            <SelectTrigger className="w-full sm:w-96"><SelectValue placeholder="Select an API…" /></SelectTrigger>
+            <SelectContent>
+              {apiList.map(a => (
+                <SelectItem key={a.id} value={String(a.id)}>{a.name} <span className="text-muted-foreground">v{a.version} · {a.status}</span></SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 
-      {/* APIs by state — Kanban columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {LIFECYCLE_STATES.map(state => {
-          const stateApis = (apis as any[] || []).filter(a => a.status === state.key);
-          const extraActions = STATE_ACTIONS[state.key] || [];
-          return (
-            <Card key={state.key} className="flex flex-col">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <state.icon className="w-4 h-4" />
-                  {state.label}
-                  <Badge variant="outline" className="ml-auto text-xs">{stateApis.length}</Badge>
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">{state.description}</p>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-2">
-                {stateApis.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-6">No APIs</p>
-                )}
-                {stateApis.map((api: any) => (
-                  <div key={api.id} className="p-3 border rounded-lg bg-muted/30 space-y-2">
-                    <div>
-                      <div className="font-medium text-sm leading-tight">{api.name}</div>
-                      <div className="text-xs text-muted-foreground">v{api.version} · {api.protocol?.toUpperCase()}</div>
-                      {api.contextPath && <div className="text-xs font-mono text-muted-foreground">{api.contextPath}</div>}
-                    </div>
-
-                    {/* Lifecycle transitions */}
-                    {VALID_TRANSITIONS[state.key]?.length > 0 && (
-                      <div className="flex gap-1 flex-wrap">
-                        {VALID_TRANSITIONS[state.key].map(target => {
-                          const t = getStateInfo(target);
-                          return (
-                            <Button key={target} size="sm" variant="outline" className="text-xs h-7 px-2"
-                              onClick={() => updateApi.mutate({ id: api.id, status: target as any })}
-                              disabled={updateApi.isPending}>
-                              → {t.label}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* State-specific extra actions */}
-                    {extraActions.length > 0 && (
-                      <div className="border-t pt-2 flex gap-1 flex-wrap">
-                        {extraActions.map(ea => (
-                          <Button key={ea.action} size="sm" variant="ghost" className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
-                            onClick={() => handleAction(api, ea.action)}>
-                            <ea.icon className="w-3 h-3 mr-1" />{ea.label}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Full API table */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">All APIs</CardTitle></CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="pb-2 font-medium">API</th>
-                  <th className="pb-2 font-medium">Version</th>
-                  <th className="pb-2 font-medium">Protocol</th>
-                  <th className="pb-2 font-medium">State</th>
-                  <th className="pb-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(apis as any[] || []).map((api: any) => {
-                  const stateInfo = getStateInfo(api.status);
+      {!api ? (
+        <Card className="border-dashed"><CardContent className="py-12 text-center text-muted-foreground text-sm">
+          {apiList.length === 0 ? "No APIs yet. Create one to manage its lifecycle." : "Select an API above."}
+        </CardContent></Card>
+      ) : (
+        <>
+          {/* Stepper */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
+                {STAGES.map((s, i) => {
+                  const done = i < currentIdx;
+                  const active = i === currentIdx;
+                  const Icon = s.icon;
                   return (
-                    <tr key={api.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-2.5 font-medium">{api.name}</td>
-                      <td className="py-2.5"><code className="bg-muted px-1.5 py-0.5 rounded text-xs">{api.version}</code></td>
-                      <td className="py-2.5"><Badge variant="outline" className="text-xs">{api.protocol}</Badge></td>
-                      <td className="py-2.5"><Badge className={`text-xs ${stateInfo.color}`}>{stateInfo.label}</Badge></td>
-                      <td className="py-2.5">
-                        <div className="flex gap-1 flex-wrap">
-                          {VALID_TRANSITIONS[api.status]?.map(target => (
-                            <Button key={target} size="sm" variant="outline" className="text-xs h-6 px-2"
-                              onClick={() => updateApi.mutate({ id: api.id, status: target as any })}
-                              disabled={updateApi.isPending}>
-                              {getStateInfo(target).label}
-                            </Button>
-                          ))}
-                          {STATE_ACTIONS[api.status]?.slice(0, 2).map(ea => (
-                            <Button key={ea.action} size="sm" variant="ghost" className="text-xs h-6 px-2"
-                              onClick={() => handleAction(api, ea.action)}>
-                              <ea.icon className="w-3 h-3 mr-1" />{ea.label}
-                            </Button>
-                          ))}
+                    <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                      <div className="flex flex-col items-center gap-2 shrink-0">
+                        <div className={`h-11 w-11 rounded-full flex items-center justify-center border-2 transition-colors ${active ? "border-primary bg-primary text-primary-foreground" : done ? "border-primary/40 bg-primary/10 text-primary" : "border-muted bg-muted/40 text-muted-foreground"}`}>
+                          {done ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
                         </div>
-                      </td>
-                    </tr>
+                        <span className={`text-xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
+                      </div>
+                      {i < STAGES.length - 1 && <div className={`h-0.5 flex-1 mx-2 -mt-6 ${i < currentIdx ? "bg-primary/40" : "bg-muted"}`} />}
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Configure Gateway Dialog */}
-      <Dialog open={!!configApi} onOpenChange={o => { if (!o) setConfigApi(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Gateway Config — {configApi?.name}</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div>
-              <Label className="text-xs">Context Path</Label>
-              <Input className="mt-1 font-mono text-sm" value={gwConfig.contextPath} onChange={e => setGwConfig(c => ({ ...c, contextPath: e.target.value }))} placeholder="/api/v1/resource" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Timeout (ms)</Label>
-                <Input className="mt-1" type="number" value={gwConfig.timeout} onChange={e => setGwConfig(c => ({ ...c, timeout: e.target.value }))} />
               </div>
-              <div>
-                <Label className="text-xs">Rate Limit (req/min)</Label>
-                <Input className="mt-1" type="number" value={gwConfig.rateLimit} onChange={e => setGwConfig(c => ({ ...c, rateLimit: e.target.value }))} />
+            </CardContent>
+          </Card>
+
+          {/* Current stage + next action */}
+          <Card>
+            <CardContent className="pt-5 space-y-5">
+              <div className="flex items-center gap-2">
+                <Badge className="capitalize">{stage}</Badge>
+                <span className="text-sm text-muted-foreground">{STAGES[currentIdx].blurb}</span>
               </div>
-            </div>
-            <Button className="w-full" onClick={() => {
-              if (!configApi) return;
-              updateApi.mutate({ id: configApi.id, contextPath: gwConfig.contextPath || undefined });
-              toast.success("Gateway config saved");
-              setConfigApi(null);
-            }}>
-              Save Configuration
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Test Endpoint Dialog */}
-      <Dialog open={!!testApi} onOpenChange={o => { if (!o) { setTestApi(null); setTestResult(null); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Test Endpoint — {testApi?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            {/* Backend URL info */}
-            <div className="text-xs text-muted-foreground bg-muted/50 rounded px-3 py-2 font-mono">
-              Backend: <span className="text-foreground">{testApi?.backendUrl || "not configured"}</span>
-            </div>
-
-            {/* Method + path */}
-            <div className="flex items-center gap-2">
-              <span className="bg-emerald-100 text-emerald-700 text-xs font-bold font-mono px-2 py-1.5 rounded flex-shrink-0">GET</span>
-              <Input
-                className="font-mono text-sm"
-                value={testPath}
-                onChange={e => setTestPath(e.target.value)}
-                placeholder="/v1/forecast"
-              />
-            </div>
-
-            {/* Query string */}
-            <div>
-              <Label className="text-xs">Query String (without ?)</Label>
-              <Input
-                className="mt-1 font-mono text-sm"
-                value={testQueryString}
-                onChange={e => setTestQueryString(e.target.value)}
-                placeholder="latitude=12.97&longitude=77.59&current=temperature_2m,wind_speed_10m"
-              />
-            </div>
-
-            {/* Effective URL preview */}
-            {testApi?.backendUrl && (
-              <div className="text-xs font-mono text-muted-foreground bg-muted/30 rounded px-3 py-2 break-all">
-                → {testApi.backendUrl.replace(/\/$/, "")}{testPath || "/"}
-                {testQueryString ? `?${testQueryString}` : ""}
-              </div>
-            )}
-
-            <Button className="w-full" onClick={runTest} disabled={testLoading}>
-              {testLoading ? "Sending…" : "Send Request"}
-            </Button>
-
-            {testResult && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${testResult.status >= 200 && testResult.status < 300 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                    {testResult.status} {testResult.statusText}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{testResult.latencyMs}ms</span>
-                  <span className="text-xs text-muted-foreground ml-auto truncate font-mono">{testResult.url}</span>
+              {stage === "draft" && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Ready to publish?</p>
+                  {checklist.map(c => (
+                    <div key={c.label} className="flex items-start gap-2 text-sm">
+                      {c.ok ? <Check className="h-4 w-4 text-emerald-600 mt-0.5" /> : <X className={`h-4 w-4 mt-0.5 ${c.optional ? "text-muted-foreground" : "text-red-500"}`} />}
+                      <div>
+                        <span className={c.ok ? "" : c.optional ? "text-muted-foreground" : "text-foreground"}>{c.label}</span>
+                        <span className="text-xs text-muted-foreground block">{c.hint}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <pre className="bg-[#1a2e4a] text-green-300 p-3 rounded text-xs font-mono overflow-auto max-h-64 whitespace-pre-wrap">
-                  {(() => {
-                    try { return JSON.stringify(JSON.parse(testResult.body), null, 2); }
-                    catch { return testResult.body; }
-                  })()}
-                </pre>
+              )}
+
+              {gatewayUrl && (stage === "published" || stage === "deprecated") && (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">Gateway URL</span>
+                    <Copy className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground" onClick={() => { navigator.clipboard.writeText(gatewayUrl); toast.success("Copied"); }} />
+                  </div>
+                  <code className="text-xs font-mono break-all">{gatewayUrl}</code>
+                </div>
+              )}
+
+              {/* Primary action(s) */}
+              <div className="flex flex-wrap gap-2">
+                {stage === "draft" && (
+                  <Button disabled={!canPublish || update.isPending} onClick={() => setConfirm("published")}>
+                    {update.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Rocket className="h-4 w-4 mr-1" />}Publish to gateway<ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+                {stage === "published" && (
+                  <Button variant="outline" disabled={update.isPending} onClick={() => setConfirm("deprecated")}>
+                    <AlertTriangle className="h-4 w-4 mr-1" />Deprecate
+                  </Button>
+                )}
+                {stage === "deprecated" && (
+                  <>
+                    <Button disabled={update.isPending} onClick={() => setConfirm("published")}><Rocket className="h-4 w-4 mr-1" />Re-publish</Button>
+                    <Button variant="outline" className="text-destructive hover:text-destructive" disabled={update.isPending} onClick={() => { setRetireText(""); setConfirm("retired"); }}><Archive className="h-4 w-4 mr-1" />Retire</Button>
+                  </>
+                )}
+                {stage === "retired" && (
+                  <Button variant="outline" disabled={update.isPending} onClick={() => setConfirm("draft")}><RotateCcw className="h-4 w-4 mr-1" />Reactivate as draft</Button>
+                )}
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Deprecation Notice Dialog */}
-      <Dialog open={!!noticeApi} onOpenChange={o => { if (!o) setNoticeApi(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Deprecation Notice — {noticeApi?.name}</DialogTitle></DialogHeader>
-          <div className="space-y-3 pt-2">
-            <Label className="text-xs">Notice message sent to all active subscribers</Label>
-            <Textarea
-              rows={4}
-              value={noticeText}
-              onChange={e => setNoticeText(e.target.value)}
-              placeholder="This API will be retired on DD-MMM-YYYY. Please migrate to v2 at /api/v2/..."
-            />
-            <Button className="w-full" onClick={() => {
-              toast.success("Deprecation notice queued for delivery to " + (noticeApi?.name || "API") + " subscribers");
-              setNoticeApi(null);
-            }}>
-              Send Notice
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+              {!canPublish && stage === "draft" && (
+                <p className="text-xs text-amber-600">Set a backend URL and context path (Configure) before publishing.</p>
+              )}
 
-      {/* Create New Version Dialog */}
-      <Dialog open={!!newVersionApi} onOpenChange={o => { if (!o) setNewVersionApi(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Create New Version — {newVersionApi?.name}</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              This creates a new <strong>Draft</strong> API based on the current published version.
-              The existing published version stays live until you deprecate it.
-            </div>
-            <div>
-              <Label className="text-xs">New Version Number</Label>
-              <Input className="mt-1 font-mono" value={newVersion} onChange={e => setNewVersion(e.target.value)} placeholder="v2.0" />
-            </div>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong>Recommended flow after this:</strong></p>
-              <p>1. Edit the new draft → Configure Gateway → Test</p>
-              <p>2. GitOps Pipeline → promote dev → staging → production</p>
-              <p>3. Deprecate this published version with a migration notice</p>
-            </div>
-            <Button className="w-full" disabled={!newVersion || createApi.isPending}
-              onClick={() => {
-                if (!newVersionApi) return;
-                const ws = (workspaces as any[])?.[0];
-                if (!ws) { toast.error("No workspace found"); return; }
-                createApi.mutate({
-                  workspaceId: newVersionApi.workspaceId || ws.id,
-                  name: newVersionApi.name,
-                  version: newVersion,
-                  protocol: newVersionApi.protocol || "rest",
-                  backendUrl: newVersionApi.backendUrl || undefined,
-                  contextPath: newVersionApi.contextPath ? `${newVersionApi.contextPath.replace(/\/v\d+$/, "")}/${newVersion.replace(/^v/, "v")}` : undefined,
-                  description: newVersionApi.description || undefined,
-                });
-              }}>
-              {createApi.isPending ? "Creating…" : `Create Draft — ${newVersion}`}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+              {/* Secondary actions */}
+              <div className="flex flex-wrap gap-2 pt-1 border-t">
+                {secondary.map(s => (
+                  <Button key={s.label} size="sm" variant="ghost" className="text-muted-foreground" onClick={() => navigate(s.to)}>
+                    <s.icon className="h-3.5 w-3.5 mr-1" />{s.label}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      <AlertDialog open={confirm !== null} onOpenChange={o => { if (!o) setConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm === "published" ? "Publish API" : confirm === "deprecated" ? "Deprecate API" : confirm === "retired" ? "Retire API" : "Reactivate API"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "published" && "This deploys the API to the gateway and makes it callable."}
+              {confirm === "deprecated" && "Consumers will be warned. The API stays callable until retired."}
+              {confirm === "retired" && <>This takes <span className="font-medium">{api?.name}</span> out of active use. Type its name to confirm.</>}
+              {confirm === "draft" && "This moves the API back to draft so you can edit and re-publish it."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirm === "retired" && (
+            <Input value={retireText} onChange={e => setRetireText(e.target.value)} placeholder={api?.name} className="font-mono" autoFocus />
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={update.isPending || (confirm === "retired" && retireText !== api?.name)} onClick={() => confirm && doTransition(confirm)}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

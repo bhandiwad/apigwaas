@@ -161,7 +161,7 @@ export default function ApiDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "overview"}>
         <div className="overflow-x-auto max-w-full">
           <TabsList className="justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
