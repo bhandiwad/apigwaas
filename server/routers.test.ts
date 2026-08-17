@@ -7,6 +7,28 @@ import { resolveActiveTenant } from "./_core/trpc";
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
+describe("authorization tiers", () => {
+  function callerWith(role: "admin" | "user", tenantRole: string | null) {
+    const { ctx } = createAuthContext();
+    (ctx.user as any).role = role;
+    (ctx.user as any).tenantRole = tenantRole;
+    return appRouter.createCaller(ctx);
+  }
+
+  it("governance actions require tenant admin (a developer is blocked)", async () => {
+    // A developer passes tenantWriteProcedure but must NOT pass tenantAdminProcedure.
+    const dev = callerWith("user", "developer");
+    await expect(dev.billing.createInvoice({} as any)).rejects.toThrow(/admin access required/i);
+    await expect(dev.rbac.createRole({} as any)).rejects.toThrow(/admin access required/i);
+    await expect(dev.compliance.createByokKey({} as any)).rejects.toThrow(/admin access required/i);
+  });
+
+  it("platform-level cluster management requires a platform admin (a tenant owner is blocked)", async () => {
+    const owner = callerWith("user", "owner");
+    await expect(owner.gateway.createCluster({} as any)).rejects.toThrow();
+  });
+});
+
 describe("resolveActiveTenant (admin tenant switch)", () => {
   const admin = { role: "admin", tenantId: 4 } as AuthenticatedUser;
   const member = { role: "user", tenantId: 4 } as AuthenticatedUser;
