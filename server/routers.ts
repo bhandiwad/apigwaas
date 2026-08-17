@@ -264,8 +264,14 @@ const apiRouter = router({
     const tid = resolveEffectiveTenantId(ctx.user.role, ctx.tenantId, input.tenantId);
     return graviteeSync.listApisHybrid(tid, input.workspaceId);
   }),
-  getById: tenantProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
-    return db.getApiById(input.id);
+  getById: tenantProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+    const api = await db.getApiById(input.id);
+    // Block cross-tenant reads: a tenant member can only see their own tenant's
+    // APIs. Platform admins may read across tenants (the switcher scopes them).
+    if (!api || (ctx.user.role !== "admin" && (api as any).tenantId !== ctx.tenantId)) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
+    }
+    return api;
   }),
   create: tenantWriteProcedure.input(z.object({
     workspaceId: z.number(),
@@ -335,6 +341,13 @@ const apiRouter = router({
     tags: z.array(z.string()).optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+
+    // Enforce tenant ownership before mutating (admins operate on their active
+    // tenant via the switcher, so ctx.tenantId is already the correct tenant).
+    const existing = await db.getApiById(id);
+    if (!existing || (existing as any).tenantId !== ctx.tenantId) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
+    }
 
     // Publishing must succeed on the gateway BEFORE we mark it published locally,
     // otherwise the UI shows "published" for an API that isn't actually deployed.

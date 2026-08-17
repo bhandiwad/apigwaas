@@ -3,8 +3,34 @@ import { appRouter } from "./routers";
 import * as db from "./db";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import { resolveActiveTenant } from "./_core/trpc";
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+
+describe("resolveActiveTenant (admin tenant switch)", () => {
+  const admin = { role: "admin", tenantId: 4 } as AuthenticatedUser;
+  const member = { role: "user", tenantId: 4 } as AuthenticatedUser;
+
+  it("honors the requested tenant for platform admins", () => {
+    expect(resolveActiveTenant(admin, 16)).toBe(16);
+  });
+
+  it("falls back to the admin's home tenant when no tenant is requested", () => {
+    expect(resolveActiveTenant(admin, undefined)).toBe(4);
+  });
+
+  it("SECURITY: ignores the requested tenant for non-admins (no cross-tenant escalation)", () => {
+    expect(resolveActiveTenant(member, 16)).toBe(4);
+  });
+
+  it("lets an admin with no home tenant operate in the requested tenant", () => {
+    expect(resolveActiveTenant({ role: "admin", tenantId: null } as AuthenticatedUser, 16)).toBe(16);
+  });
+
+  it("returns undefined for a non-admin with no tenant, regardless of header", () => {
+    expect(resolveActiveTenant({ role: "user", tenantId: null } as AuthenticatedUser, 16)).toBeUndefined();
+  });
+});
 
 function createAuthContext(): { ctx: TrpcContext; clearedCookies: any[] } {
   const clearedCookies: any[] = [];

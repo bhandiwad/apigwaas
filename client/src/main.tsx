@@ -42,6 +42,13 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
+      headers() {
+        // Tell the server which tenant the admin switcher is currently on.
+        // The server only honors this for platform admins; non-admins are pinned
+        // to their own tenant regardless, so sending it is always safe.
+        const activeTenant = typeof window !== "undefined" ? window.localStorage.getItem("ci.tenantId") : null;
+        return activeTenant ? { "x-tenant-id": activeTenant } : {};
+      },
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),

@@ -27,6 +27,15 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+// Resolve which tenant this request operates in. Platform admins may act within
+// another tenant via the switcher (x-tenant-id header → ctx.requestedTenantId);
+// everyone else is pinned to their own tenant, so the header can never be used
+// to reach into a tenant the user doesn't belong to.
+export function resolveActiveTenant(user: NonNullable<TrpcContext["user"]>, requestedTenantId?: number): number | undefined {
+  if (user.role === "admin" && requestedTenantId) return requestedTenantId;
+  return user.tenantId ?? undefined;
+}
+
 const requireTenant = t.middleware(async opts => {
   const { ctx, next } = opts;
 
@@ -34,7 +43,8 @@ const requireTenant = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
-  if (!ctx.user.tenantId) {
+  const tenantId = resolveActiveTenant(ctx.user, ctx.requestedTenantId);
+  if (!tenantId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "No tenant associated with your account. Create or join a tenant first." });
   }
 
@@ -42,7 +52,7 @@ const requireTenant = t.middleware(async opts => {
     ctx: {
       ...ctx,
       user: ctx.user,
-      tenantId: ctx.user.tenantId,
+      tenantId,
     },
   });
 });
@@ -76,10 +86,11 @@ const requireTenantAdmin = t.middleware(async opts => {
   if (!isAdmin && !isTenantAdmin) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Tenant admin access required." });
   }
-  if (!isAdmin && !ctx.user.tenantId) {
+  const tenantId = resolveActiveTenant(ctx.user, ctx.requestedTenantId);
+  if (!tenantId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "No tenant associated with your account." });
   }
-  return next({ ctx: { ...ctx, user: ctx.user, tenantId: ctx.user.tenantId as number } });
+  return next({ ctx: { ...ctx, user: ctx.user, tenantId } });
 });
 
 export const tenantAdminProcedure = t.procedure.use(requireTenantAdmin);
@@ -88,13 +99,14 @@ export const tenantAdminProcedure = t.procedure.use(requireTenantAdmin);
 const requireTenantWrite = t.middleware(async opts => {
   const { ctx, next } = opts;
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
-  if (!ctx.user.tenantId) throw new TRPCError({ code: "FORBIDDEN", message: "No tenant associated with your account." });
   const isAdmin = ctx.user.role === "admin";
+  const tenantId = resolveActiveTenant(ctx.user, ctx.requestedTenantId);
+  if (!tenantId) throw new TRPCError({ code: "FORBIDDEN", message: "No tenant associated with your account." });
   const canWrite = ctx.user.tenantRole === "owner" || ctx.user.tenantRole === "admin" || ctx.user.tenantRole === "developer";
   if (!isAdmin && !canWrite) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You have view-only access. Contact your tenant admin to change your role." });
   }
-  return next({ ctx: { ...ctx, user: ctx.user, tenantId: ctx.user.tenantId } });
+  return next({ ctx: { ...ctx, user: ctx.user, tenantId } });
 });
 
 export const tenantWriteProcedure = t.procedure.use(requireTenantWrite);
