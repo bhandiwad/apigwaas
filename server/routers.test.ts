@@ -230,4 +230,28 @@ describe("metric extraction rules", () => {
       expect(afterDelete).toBeUndefined();
     }
   });
+
+  it("SECURITY: blocks cross-tenant mutation of another tenant's rule", async () => {
+    // Create a rule owned by the default context's tenant (tenantId 1).
+    const owner = appRouter.createCaller(createAuthContext().ctx);
+    const { id } = await owner.analytics.createExtractionRule({
+      name: "xtenant_" + Date.now(),
+      extractionPath: "$.x",
+    });
+    try {
+      // A caller in a different tenant must NOT be able to update or delete it.
+      const otherCtx = createAuthContext().ctx;
+      (otherCtx.user as any).tenantId = 999_999; // a tenant that owns no rules
+      (otherCtx.user as any).role = "user";      // non-admin: no cross-tenant reach
+      const attacker = appRouter.createCaller(otherCtx);
+      await expect(attacker.analytics.updateExtractionRule({ id, enabled: false })).rejects.toThrow(/not found/i);
+      await expect(attacker.analytics.deleteExtractionRule({ id })).rejects.toThrow(/not found/i);
+      // The rule is untouched and still owned by tenant 1.
+      const still = (await owner.analytics.extractionRules() as any[]).find((r) => r.id === id);
+      expect(still).toBeDefined();
+      expect(still.enabled).toBe(true);
+    } finally {
+      await owner.analytics.deleteExtractionRule({ id });
+    }
+  });
 });

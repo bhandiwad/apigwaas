@@ -188,6 +188,12 @@ export async function getPlansByApi(apiId: number) {
   return db.select().from(plans).where(eq(plans.apiId, apiId));
 }
 
+export async function getPlanById(id: number) {
+  const db = getDb();
+  const result = await db.select().from(plans).where(eq(plans.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
 export async function updatePlan(id: number, data: Partial<typeof plans.$inferInsert>) {
   const db = getDb();
   await db.update(plans).set({ ...data, updatedAt: new Date() }).where(eq(plans.id, id));
@@ -776,6 +782,12 @@ export async function getPolicyChains(apiId: number) {
     .leftJoin(policies, eq(policyChains.policyId, policies.id))
     .where(eq(policyChains.apiId, apiId))
     .orderBy(policyChains.phase, policyChains.order);
+}
+
+export async function getPolicyChainById(id: number) {
+  const db = getDb();
+  const result = await db.select().from(policyChains).where(eq(policyChains.id, id)).limit(1);
+  return result[0] ?? null;
 }
 
 export async function createPolicyChain(data: typeof policyChains.$inferInsert) {

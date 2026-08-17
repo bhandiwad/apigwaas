@@ -19,6 +19,15 @@ function resolveEffectiveTenantId(userRole: string, ctxTenantId: number, inputTe
   return (userRole === "admin" && inputTenantId) ? inputTenantId : ctxTenantId;
 }
 
+// Guard against cross-tenant writes: throw NOT_FOUND unless `id` is among the
+// caller's own rows. Callers pass a tenant-scoped list (e.g. getMaskingRules(ctx.tenantId)),
+// so a resource id belonging to another tenant is simply absent from the set.
+function assertOwned(rows: Array<{ id: number }>, id: number, label = "Resource"): void {
+  if (!rows.some(r => r.id === id)) {
+    throw new TRPCError({ code: "NOT_FOUND", message: `${label} not found` });
+  }
+}
+
 // Actor attribution for audit events — spread into createAuditEvent so every
 // logged action records who performed it instead of defaulting to "System".
 function actor(ctx: { user: { id: number; name?: string | null; email?: string | null } }) {
@@ -242,12 +251,14 @@ const workspaceRouter = router({
     name: z.string().optional(),
     status: z.enum(["active", "archived", "deleted"]).optional(),
     description: z.string().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getWorkspacesByTenant(ctx.tenantId), id, "Workspace");
     await db.updateWorkspace(id, data);
     return { success: true };
   }),
   archive: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getWorkspacesByTenant(ctx.tenantId), input.id, "Workspace");
     await db.archiveWorkspace(input.id);
     await db.createAuditEvent({ action: "workspace.archived", actionType: "delete", targetType: "workspace", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -518,12 +529,16 @@ const planRouter = router({
     quotaLimit: z.number().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    const plan = await db.getPlanById(id);
+    if (!plan || (plan as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found" });
     await db.updatePlan(id, data);
     const action = data.status === "active" ? "plan.activated" : data.status === "closed" ? "plan.deactivated" : "plan.updated";
     await db.createAuditEvent({ action, actionType: "update", targetType: "plan", targetId: String(id), targetName: data.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const plan = await db.getPlanById(input.id);
+    if (!plan || (plan as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found" });
     await db.deletePlan(input.id);
     await db.createAuditEvent({ action: "plan.deleted", actionType: "delete", targetType: "plan", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -553,6 +568,8 @@ const consumerAppRouter = router({
     return { id, clientId, clientSecret };
   }),
   revoke: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const app = await db.getConsumerAppById(input.id);
+    if (!app || (app as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Consumer app not found" });
     await db.revokeConsumerApp(input.id);
     await db.createAuditEvent({ action: "consumer_app.revoked", actionType: "delete", targetType: "consumer_app", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -579,22 +596,30 @@ const subscriptionRouter = router({
   update: tenantProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["pending", "approved", "rejected", "revoked", "expired"]),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    const sub = await db.getSubscriptionById(id);
+    if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     await db.updateSubscription(id, data);
     return { success: true };
   }),
   revoke: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const sub = await db.getSubscriptionById(input.id);
+    if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     await db.revokeSubscription(input.id);
     await db.createAuditEvent({ action: "subscription.revoked", actionType: "delete", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   approve: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const sub = await db.getSubscriptionById(input.id);
+    if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     const result = await graviteeSync.approveSubscriptionHybrid(input.id);
     await db.createAuditEvent({ action: "subscription.approved", actionType: "approve", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true, apiKey: result.apiKey };
   }),
   reject: tenantProcedure.input(z.object({ id: z.number(), reason: z.string().optional() })).mutation(async ({ ctx, input }) => {
+    const sub = await db.getSubscriptionById(input.id);
+    if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     await graviteeSync.rejectSubscriptionHybrid(input.id, input.reason);
     await db.createAuditEvent({ action: "subscription.rejected", actionType: "reject", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -634,18 +659,22 @@ const policyRouter = router({
     priority: z.number().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getPoliciesByTenant(ctx.tenantId), id, "Policy");
     await db.updatePolicy(id, data);
     const action = data.enabled === true ? "policy.enabled" : data.enabled === false ? "policy.disabled" : "policy.updated";
     await db.createAuditEvent({ action, actionType: "update", targetType: "policy", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getPoliciesByTenant(ctx.tenantId), input.id, "Policy");
     await db.deletePolicy(input.id);
     await db.createAuditEvent({ action: "policy.deleted", actionType: "delete", targetType: "policy", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   // Enforce this API's ip_filtering policies at the gateway (allow/deny by IP/CIDR).
   deployIpFiltering: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+    const api = await db.getApiById(input.apiId);
+    if (!api || (api as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
     let result;
     try {
       result = await graviteeSync.deployApiIpFilteringToGateway(input.apiId);
@@ -1099,12 +1128,14 @@ const analyticsRouter = router({
     extractionType: z.enum(["jsonpath", "header", "regex", "groovy"]).optional(),
     metricType: z.enum(["counter", "gauge", "histogram", "summary"]).optional(),
     kafkaTopic: z.string().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getMetricExtractionRules(ctx.tenantId), id, "Extraction rule");
     await db.updateMetricExtractionRule(id, data);
     return { success: true };
   }),
-  deleteExtractionRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+  deleteExtractionRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getMetricExtractionRules(ctx.tenantId), input.id, "Extraction rule");
     await db.deleteMetricExtractionRule(input.id);
     return { success: true };
   }),
@@ -1200,7 +1231,8 @@ const notificationRouter = router({
   list: protectedProcedure.input(z.object({ unreadOnly: z.boolean().default(false) })).query(async ({ ctx, input }) => {
     return db.getNotificationsByUser(ctx.user.id, input.unreadOnly);
   }),
-  markRead: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+  markRead: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getNotificationsByUser(ctx.user.id), input.id, "Notification");
     await db.markNotificationRead(input.id);
     return { success: true };
   }),
@@ -1381,6 +1413,7 @@ const devPortalRouter = router({
     logoUrl: z.string().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getDeveloperPortals(ctx.tenantId), id, "Developer portal");
     await db.updateDeveloperPortal(id, data);
     // When activating the portal or updating published APIs, sync to Gravitee Portal
     if (data.status === "active" || data.publishedApis) {
@@ -1431,17 +1464,21 @@ const maskingRouter = router({
     replacement: z.string().optional(),
     showLastN: z.number().optional(),
     priority: z.number().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getMaskingRules(ctx.tenantId), id, "Masking rule");
     await db.updateMaskingRule(id, data);
     return { success: true };
   }),
-  deleteRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+  deleteRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getMaskingRules(ctx.tenantId), input.id, "Masking rule");
     await db.deleteMaskingRule(input.id);
     return { success: true };
   }),
   // Compile this API's response masking rules into a gateway policy and redeploy.
   deployToGateway: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+    const api = await db.getApiById(input.apiId);
+    if (!api || (api as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
     let result;
     try {
       result = await graviteeSync.deployApiMaskingToGateway(input.apiId);
@@ -1489,7 +1526,8 @@ const dcrRouter = router({
     }
     return { id, clientId, clientSecret, registrationAccessToken, graviteeAppId };
   }),
-  rotateSecret: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+  rotateSecret: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getDcrClients(ctx.tenantId), input.id, "DCR client");
     const newSecret = nanoid(48);
     const newHash = crypto.createHash("sha256").update(newSecret).digest("hex");
     await db.updateDcrClient(input.id, { clientSecretHash: newHash, lastRotatedAt: new Date() });
@@ -1498,7 +1536,8 @@ const dcrRouter = router({
   updateStatus: tenantProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["active", "suspended", "revoked"]),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getDcrClients(ctx.tenantId), input.id, "DCR client");
     await db.updateDcrClient(input.id, { status: input.status });
     return { success: true };
   }),
@@ -1537,12 +1576,14 @@ const idpRouter = router({
     roleClaimMapping: z.any().optional(),
     jitProvisioning: z.boolean().optional(),
     scimEnabled: z.boolean().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getIdentityProviders(ctx.tenantId), id, "Identity provider");
     await db.updateIdentityProvider(id, data);
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getIdentityProviders(ctx.tenantId), input.id, "Identity provider");
     await db.deleteIdentityProvider(input.id);
     await db.createAuditEvent({ action: "idp.deleted", actionType: "delete", targetType: "identity_provider", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -1574,12 +1615,14 @@ const envRouter = router({
     gitFolder: z.string().optional(),
     argoAppName: z.string().optional(),
     autoPromote: z.boolean().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getApiEnvironments(ctx.tenantId), id, "Environment");
     await db.updateApiEnvironment(id, data);
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getApiEnvironments(ctx.tenantId), input.id, "Environment");
     await db.deleteApiEnvironment(input.id);
     return { success: true };
   }),
@@ -1609,12 +1652,14 @@ const alertRouter = router({
     threshold: z.number().optional(),
     severity: z.enum(["info", "warning", "critical"]).optional(),
     channels: z.array(z.object({ type: z.string(), target: z.string() })).optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getAlertRules(ctx.tenantId), id, "Alert rule");
     await db.updateAlertRule(id, { ...data, threshold: data.threshold ? String(data.threshold) : undefined });
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getAlertRules(ctx.tenantId), input.id, "Alert rule");
     await db.deleteAlertRule(input.id);
     return { success: true };
   }),
@@ -1647,12 +1692,14 @@ const eventRouter = router({
     brokerUrl: z.string().optional(),
     authMethod: z.enum(["none", "sasl_plain", "sasl_scram", "mtls", "api_key"]).optional(),
     configuration: z.any().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    assertOwned(await db.getEventEntrypoints(undefined, ctx.tenantId), id, "Event entrypoint");
     await db.updateEventEntrypoint(id, data);
     return { success: true };
   }),
   delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    assertOwned(await db.getEventEntrypoints(undefined, ctx.tenantId), input.id, "Event entrypoint");
     await db.deleteEventEntrypoint(input.id);
     return { success: true };
   }),
@@ -1707,12 +1754,16 @@ const policyChainRouter = router({
     configuration: z.any().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
+    const chain = await db.getPolicyChainById(id);
+    if (!chain || (chain as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Policy chain not found" });
     await db.updatePolicyChain(id, data);
     const action = data.enabled === true ? "policy.chain_enabled" : data.enabled === false ? "policy.chain_disabled" : "policy.chain_updated";
     await db.createAuditEvent({ action, actionType: "update", targetType: "policy_chain", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
   remove: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const chain = await db.getPolicyChainById(input.id);
+    if (!chain || (chain as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Policy chain not found" });
     await db.deletePolicyChain(input.id);
     await db.createAuditEvent({ action: "policy.detached", actionType: "delete", targetType: "policy_chain", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
