@@ -246,7 +246,7 @@ const workspaceRouter = router({
     await db.createAuditEvent({ action: "workspace.created", actionType: "create", targetType: "workspace", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id, slug };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     name: z.string().optional(),
     status: z.enum(["active", "archived", "deleted"]).optional(),
@@ -257,7 +257,7 @@ const workspaceRouter = router({
     await db.updateWorkspace(id, data);
     return { success: true };
   }),
-  archive: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  archive: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getWorkspacesByTenant(ctx.tenantId), input.id, "Workspace");
     await db.archiveWorkspace(input.id);
     await db.createAuditEvent({ action: "workspace.archived", actionType: "delete", targetType: "workspace", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
@@ -340,7 +340,7 @@ const apiRouter = router({
     await db.createAuditEvent({ action: "api.imported", actionType: "create", targetType: "api", targetId: String(result.id), targetName: (result as any).name, tenantId: ctx.tenantId, ...actor(ctx) });
     return result;
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     name: z.string().optional(),
     version: z.string().optional(),
@@ -378,7 +378,7 @@ const apiRouter = router({
     await db.createAuditEvent({ action, actionType: "update", targetType: "api", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const api = await db.getApiById(input.id);
     if (!api || (api as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "API not found" });
     // Remove from Gravitee first so the context-path is freed and no orphan API is left behind.
@@ -391,7 +391,7 @@ const apiRouter = router({
     await db.createAuditEvent({ action: "api.deleted", actionType: "delete", targetType: "api", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  saveFlows: tenantProcedure.input(z.object({
+  saveFlows: tenantWriteProcedure.input(z.object({
     apiId: z.number(),
     flows: z.array(z.object({
       phase: z.enum(["request", "response"]),
@@ -505,7 +505,7 @@ const planRouter = router({
   list: tenantProcedure.input(z.object({ apiId: z.number() })).query(async ({ input }) => {
     return db.getPlansByApi(input.apiId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     apiId: z.number(),
     name: z.string().min(1),
     description: z.string().optional(),
@@ -521,7 +521,7 @@ const planRouter = router({
     await db.createAuditEvent({ action: "plan.created", actionType: "create", targetType: "plan", targetId: String(result.id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return result;
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     name: z.string().optional(),
     status: z.enum(["active", "closed", "deprecated"]).optional(),
@@ -536,7 +536,7 @@ const planRouter = router({
     await db.createAuditEvent({ action, actionType: "update", targetType: "plan", targetId: String(id), targetName: data.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const plan = await db.getPlanById(input.id);
     if (!plan || (plan as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found" });
     await db.deletePlan(input.id);
@@ -567,7 +567,7 @@ const consumerAppRouter = router({
     await graviteeSync.createConsumerAppHybrid({ id: id!, name: input.name, description: input.description, clientId });
     return { id, clientId, clientSecret };
   }),
-  revoke: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  revoke: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const app = await db.getConsumerAppById(input.id);
     if (!app || (app as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Consumer app not found" });
     await db.revokeConsumerApp(input.id);
@@ -584,7 +584,7 @@ const subscriptionRouter = router({
     const status = await graviteeSync.getConnectionStatus();
     return { data: result.data.map((s: any) => ({ ...s, syncSource: status.mode })), total: result.total };
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     consumerAppId: z.number(),
     planId: z.number(),
     apiId: z.number(),
@@ -593,7 +593,7 @@ const subscriptionRouter = router({
     await db.createAuditEvent({ action: "subscription.created", actionType: "approve", targetType: "subscription", targetId: String(result.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return result;
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["pending", "approved", "rejected", "revoked", "expired"]),
   })).mutation(async ({ ctx, input }) => {
@@ -603,28 +603,28 @@ const subscriptionRouter = router({
     await db.updateSubscription(id, data);
     return { success: true };
   }),
-  revoke: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  revoke: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const sub = await db.getSubscriptionById(input.id);
     if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     await db.revokeSubscription(input.id);
     await db.createAuditEvent({ action: "subscription.revoked", actionType: "delete", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  approve: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  approve: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const sub = await db.getSubscriptionById(input.id);
     if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     const result = await graviteeSync.approveSubscriptionHybrid(input.id);
     await db.createAuditEvent({ action: "subscription.approved", actionType: "approve", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true, apiKey: result.apiKey };
   }),
-  reject: tenantProcedure.input(z.object({ id: z.number(), reason: z.string().optional() })).mutation(async ({ ctx, input }) => {
+  reject: tenantWriteProcedure.input(z.object({ id: z.number(), reason: z.string().optional() })).mutation(async ({ ctx, input }) => {
     const sub = await db.getSubscriptionById(input.id);
     if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     await graviteeSync.rejectSubscriptionHybrid(input.id, input.reason);
     await db.createAuditEvent({ action: "subscription.rejected", actionType: "reject", targetType: "subscription", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  rotateKey: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  rotateKey: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const sub = await db.getSubscriptionById(input.id);
     if (!sub || (sub as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Subscription not found" });
     const result = await graviteeSync.rotateSubscriptionApiKeyHybrid(input.id);
@@ -639,7 +639,7 @@ const policyRouter = router({
     if (input.apiId) return db.getPoliciesByApi(input.apiId);
     return db.getPoliciesByTenant(ctx.tenantId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     apiId: z.number().optional(),
     name: z.string().min(1),
     type: z.enum(["masking", "rate_limit", "geoip", "vault_secret", "cors", "ip_filtering", "jwt_validation", "oauth2"]),
@@ -652,7 +652,7 @@ const policyRouter = router({
     await db.createAuditEvent({ action: "policy.created", actionType: "create", targetType: "policy", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     enabled: z.boolean().optional(),
     configuration: z.any().optional(),
@@ -665,7 +665,7 @@ const policyRouter = router({
     await db.createAuditEvent({ action, actionType: "update", targetType: "policy", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getPoliciesByTenant(ctx.tenantId), input.id, "Policy");
     await db.deletePolicy(input.id);
     await db.createAuditEvent({ action: "policy.deleted", actionType: "delete", targetType: "policy", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
@@ -759,7 +759,7 @@ const billingRouter = router({
   invoices: tenantProcedure.query(async ({ ctx }) => {
     return db.getInvoicesByTenant(ctx.tenantId);
   }),
-  createInvoice: tenantProcedure.input(z.object({
+  createInvoice: tenantWriteProcedure.input(z.object({
     periodStart: z.string(),
     periodEnd: z.string(),
     lineItems: z.any(),
@@ -783,7 +783,7 @@ const billingRouter = router({
     await db.createAuditEvent({ action: "invoice.created", actionType: "create", targetType: "invoice", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { id, invoiceNumber };
   }),
-  updateInvoice: tenantProcedure.input(z.object({
+  updateInvoice: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["draft", "issued", "paid", "overdue", "cancelled", "disputed"]).optional(),
     paidAt: z.string().optional(),
@@ -883,7 +883,7 @@ const complianceRouter = router({
   byokKeys: tenantProcedure.query(async ({ ctx }) => {
     return db.getByokKeysByTenant(ctx.tenantId);
   }),
-  createByokKey: tenantProcedure.input(z.object({
+  createByokKey: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     provider: z.enum(["vault", "aws_kms", "azure_keyvault"]),
     keyIdentifier: z.string().min(1),
@@ -892,7 +892,7 @@ const complianceRouter = router({
     await db.createAuditEvent({ action: "byok_key.created", actionType: "create", targetType: "byok_key", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  updateByokKey: tenantProcedure.input(z.object({
+  updateByokKey: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["active", "rotating", "revoked"]).optional(),
   })).mutation(async ({ input }) => {
@@ -941,7 +941,7 @@ const complianceRouter = router({
   dpdpRequests: tenantProcedure.query(async ({ ctx }) => {
     return db.getDpdpRequests(ctx.tenantId);
   }),
-  updateDpdpRequest: tenantProcedure.input(z.object({
+  updateDpdpRequest: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["pending", "in_progress", "completed", "rejected", "overdue"]).optional(),
     response: z.string().optional(),
@@ -987,7 +987,7 @@ const complianceRouter = router({
   processingActivities: tenantProcedure.query(async ({ ctx }) => {
     return db.getDataProcessingActivities(ctx.tenantId);
   }),
-  createProcessingActivity: tenantProcedure.input(z.object({
+  createProcessingActivity: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     purpose: z.string().min(1),
     dataCategories: z.array(z.string()).optional(),
@@ -1015,7 +1015,7 @@ const complianceRouter = router({
     await db.createAuditEvent({ action: "processing_activity.created", actionType: "create", targetType: "processing_activity", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  updateProcessingActivity: tenantProcedure.input(z.object({
+  updateProcessingActivity: tenantWriteProcedure.input(z.object({
     id: z.number(),
     name: z.string().optional(),
     purpose: z.string().optional(),
@@ -1044,7 +1044,7 @@ const rbacRouter = router({
   roles: tenantProcedure.query(async ({ ctx }) => {
     return db.getRolesByTenant(ctx.tenantId);
   }),
-  createRole: tenantProcedure.input(z.object({
+  createRole: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     description: z.string().optional(),
     scope: z.enum(["platform", "workspace", "api", "application"]).default("workspace"),
@@ -1072,7 +1072,7 @@ const rbacRouter = router({
     await db.removeRoleAssignment(input.id);
     return { success: true };
   }),
-  deleteRole: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  deleteRole: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     await db.deleteRole(input.id);
     await db.createAuditEvent({ action: "role.deleted", actionType: "delete", targetType: "role", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
@@ -1110,7 +1110,7 @@ const analyticsRouter = router({
   extractionRules: tenantProcedure.query(async ({ ctx }) => {
     return db.getMetricExtractionRules(ctx.tenantId);
   }),
-  createExtractionRule: tenantProcedure.input(z.object({
+  createExtractionRule: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     extractionPath: z.string().min(1),
     extractionType: z.enum(["jsonpath", "header", "regex", "groovy"]).default("jsonpath"),
@@ -1121,7 +1121,7 @@ const analyticsRouter = router({
     await db.createAuditEvent({ action: "metric_rule.created", actionType: "create", targetType: "metric_extraction_rule", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  updateExtractionRule: tenantProcedure.input(z.object({
+  updateExtractionRule: tenantWriteProcedure.input(z.object({
     id: z.number(),
     enabled: z.boolean().optional(),
     extractionPath: z.string().optional(),
@@ -1134,7 +1134,7 @@ const analyticsRouter = router({
     await db.updateMetricExtractionRule(id, data);
     return { success: true };
   }),
-  deleteExtractionRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  deleteExtractionRule: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getMetricExtractionRules(ctx.tenantId), input.id, "Extraction rule");
     await db.deleteMetricExtractionRule(input.id);
     return { success: true };
@@ -1361,12 +1361,12 @@ const gatewayRouter = router({
   connectionStatus: protectedProcedure.query(async () => {
     return { ...(await graviteeSync.getConnectionStatus()), gatewayBaseUrl: ENV.graviteeGatewayUrl };
   }),
-  startApi: tenantProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+  startApi: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
     const api = await db.getApiById(input.apiId);
     if (!api || (api as any).tenantId !== ctx.tenantId) throw new Error("API not found");
     return graviteeSync.startApiHybrid(input.apiId);
   }),
-  stopApi: tenantProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
+  stopApi: tenantWriteProcedure.input(z.object({ apiId: z.number() })).mutation(async ({ ctx, input }) => {
     const api = await db.getApiById(input.apiId);
     if (!api || (api as any).tenantId !== ctx.tenantId) throw new Error("API not found");
     return graviteeSync.stopApiHybrid(input.apiId);
@@ -1387,7 +1387,7 @@ const devPortalRouter = router({
     const portals = await db.getDeveloperPortals(ctx.tenantId);
     return portals.map((p: any) => ({ ...p, syncSource: "local" }));
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     customDomain: z.string().optional(),
     description: z.string().optional(),
@@ -1399,7 +1399,7 @@ const devPortalRouter = router({
     await db.createAuditEvent({ action: "developer_portal.created", actionType: "create", targetType: "developer_portal", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     name: z.string().optional(),
     customDomain: z.string().optional(),
@@ -1441,7 +1441,7 @@ const maskingRouter = router({
   })).query(async ({ ctx, input }) => {
     return db.getMaskingRules(ctx.tenantId, input.apiId);
   }),
-  createRule: tenantProcedure.input(z.object({
+  createRule: tenantWriteProcedure.input(z.object({
     apiId: z.number().optional(),
     name: z.string().min(1),
     jsonPath: z.string().min(1),
@@ -1456,7 +1456,7 @@ const maskingRouter = router({
     await db.createAuditEvent({ action: "masking_rule.created", actionType: "create", targetType: "masking_rule", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  updateRule: tenantProcedure.input(z.object({
+  updateRule: tenantWriteProcedure.input(z.object({
     id: z.number(),
     enabled: z.boolean().optional(),
     jsonPath: z.string().optional(),
@@ -1470,7 +1470,7 @@ const maskingRouter = router({
     await db.updateMaskingRule(id, data);
     return { success: true };
   }),
-  deleteRule: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  deleteRule: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getMaskingRules(ctx.tenantId), input.id, "Masking rule");
     await db.deleteMaskingRule(input.id);
     return { success: true };
@@ -1495,7 +1495,7 @@ const dcrRouter = router({
   clients: tenantProcedure.query(async ({ ctx }) => {
     return db.getDcrClients(ctx.tenantId);
   }),
-  register: tenantProcedure.input(z.object({
+  register: tenantWriteProcedure.input(z.object({
     clientName: z.string().min(1),
     redirectUris: z.array(z.string()).optional(),
     grantTypes: z.array(z.string()).default(["client_credentials"]),
@@ -1526,14 +1526,14 @@ const dcrRouter = router({
     }
     return { id, clientId, clientSecret, registrationAccessToken, graviteeAppId };
   }),
-  rotateSecret: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  rotateSecret: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getDcrClients(ctx.tenantId), input.id, "DCR client");
     const newSecret = nanoid(48);
     const newHash = crypto.createHash("sha256").update(newSecret).digest("hex");
     await db.updateDcrClient(input.id, { clientSecretHash: newHash, lastRotatedAt: new Date() });
     return { clientSecret: newSecret };
   }),
-  updateStatus: tenantProcedure.input(z.object({
+  updateStatus: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["active", "suspended", "revoked"]),
   })).mutation(async ({ ctx, input }) => {
@@ -1548,7 +1548,7 @@ const idpRouter = router({
   list: tenantProcedure.query(async ({ ctx }) => {
     return db.getIdentityProviders(ctx.tenantId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     type: z.enum(["oidc", "saml", "ldap"]),
     issuerUrl: z.string().optional(),
@@ -1569,7 +1569,7 @@ const idpRouter = router({
     await db.createAuditEvent({ action: "idp.created", actionType: "create", targetType: "identity_provider", targetId: String(id), targetName: input.name, tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["active", "inactive", "testing"]).optional(),
     groupClaimMapping: z.any().optional(),
@@ -1582,7 +1582,7 @@ const idpRouter = router({
     await db.updateIdentityProvider(id, data);
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getIdentityProviders(ctx.tenantId), input.id, "Identity provider");
     await db.deleteIdentityProvider(input.id);
     await db.createAuditEvent({ action: "idp.deleted", actionType: "delete", targetType: "identity_provider", targetId: String(input.id), tenantId: ctx.tenantId, ...actor(ctx) });
@@ -1595,7 +1595,7 @@ const envRouter = router({
   list: tenantProcedure.query(async ({ ctx }) => {
     return db.getApiEnvironments(ctx.tenantId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
     order: z.number().default(0),
@@ -1608,7 +1608,7 @@ const envRouter = router({
     const id = await db.createApiEnvironment({ ...input, tenantId: ctx.tenantId });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     clusterId: z.number().optional(),
     gitBranch: z.string().optional(),
@@ -1621,7 +1621,7 @@ const envRouter = router({
     await db.updateApiEnvironment(id, data);
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getApiEnvironments(ctx.tenantId), input.id, "Environment");
     await db.deleteApiEnvironment(input.id);
     return { success: true };
@@ -1633,7 +1633,7 @@ const alertRouter = router({
   rules: tenantProcedure.query(async ({ ctx }) => {
     return db.getAlertRules(ctx.tenantId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     name: z.string().min(1),
     type: z.enum(["error_rate", "latency_p99", "quota_usage", "cert_expiry", "subscription_expiry", "custom"]),
     condition: z.any().optional(),
@@ -1646,7 +1646,7 @@ const alertRouter = router({
     const id = await db.createAlertRule({ ...input, tenantId: ctx.tenantId, threshold: input.threshold ? String(input.threshold) : undefined, channels: input.channels || [] });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     enabled: z.boolean().optional(),
     threshold: z.number().optional(),
@@ -1658,7 +1658,7 @@ const alertRouter = router({
     await db.updateAlertRule(id, { ...data, threshold: data.threshold ? String(data.threshold) : undefined });
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getAlertRules(ctx.tenantId), input.id, "Alert rule");
     await db.deleteAlertRule(input.id);
     return { success: true };
@@ -1672,7 +1672,7 @@ const eventRouter = router({
   })).query(async ({ ctx, input }) => {
     return db.getEventEntrypoints(input.apiId, ctx.tenantId);
   }),
-  create: tenantProcedure.input(z.object({
+  create: tenantWriteProcedure.input(z.object({
     apiId: z.number(),
     type: z.enum(["kafka", "mqtt", "rabbitmq", "webhook"]),
     topicPattern: z.string().optional(),
@@ -1685,7 +1685,7 @@ const eventRouter = router({
     await db.createAuditEvent({ action: "event_entrypoint.created", actionType: "create", targetType: "event_entrypoint", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     status: z.enum(["active", "inactive", "error"]).optional(),
     topicPattern: z.string().optional(),
@@ -1698,7 +1698,7 @@ const eventRouter = router({
     await db.updateEventEntrypoint(id, data);
     return { success: true };
   }),
-  delete: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     assertOwned(await db.getEventEntrypoints(undefined, ctx.tenantId), input.id, "Event entrypoint");
     await db.deleteEventEntrypoint(input.id);
     return { success: true };
@@ -1720,7 +1720,7 @@ const policyChainRouter = router({
     const chains = await db.getPolicyChains(input.apiId);
     return chains.map((c: any) => ({ ...c, syncSource: "local" }));
   }),
-  add: tenantProcedure.input(z.object({
+  add: tenantWriteProcedure.input(z.object({
     apiId: z.number(),
     phase: z.enum(["request", "response", "connect", "subscribe", "publish"]),
     policyId: z.number(),
@@ -1746,7 +1746,7 @@ const policyChainRouter = router({
     await db.createAuditEvent({ action: "policy.attached", actionType: "update", targetType: "api", targetId: String(input.apiId), tenantId: ctx.tenantId, ...actor(ctx) });
     return { id };
   }),
-  update: tenantProcedure.input(z.object({
+  update: tenantWriteProcedure.input(z.object({
     id: z.number(),
     order: z.number().optional(),
     condition: z.string().optional(),
@@ -1761,7 +1761,7 @@ const policyChainRouter = router({
     await db.createAuditEvent({ action, actionType: "update", targetType: "policy_chain", targetId: String(id), tenantId: ctx.tenantId, ...actor(ctx) });
     return { success: true };
   }),
-  remove: tenantProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+  remove: tenantWriteProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const chain = await db.getPolicyChainById(input.id);
     if (!chain || (chain as any).tenantId !== ctx.tenantId) throw new TRPCError({ code: "NOT_FOUND", message: "Policy chain not found" });
     await db.deletePolicyChain(input.id);
@@ -1775,7 +1775,7 @@ const kafkaReporterRouter = router({
   get: tenantProcedure.query(async ({ ctx }) => {
     return db.getKafkaReporterConfig(ctx.tenantId);
   }),
-  save: tenantProcedure.input(z.object({
+  save: tenantWriteProcedure.input(z.object({
     brokers: z.string().optional(),
     enabled: z.boolean().optional(),
     reporters: z.any().optional(),

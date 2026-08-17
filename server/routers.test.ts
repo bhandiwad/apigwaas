@@ -239,10 +239,13 @@ describe("metric extraction rules", () => {
       extractionPath: "$.x",
     });
     try {
-      // A caller in a different tenant must NOT be able to update or delete it.
+      // A caller in a different tenant — even a legitimate writer there — must NOT
+      // be able to update or delete another tenant's rule (ownership gate, not the
+      // write gate: tenantRole developer passes the write check).
       const otherCtx = createAuthContext().ctx;
       (otherCtx.user as any).tenantId = 999_999; // a tenant that owns no rules
       (otherCtx.user as any).role = "user";      // non-admin: no cross-tenant reach
+      (otherCtx.user as any).tenantRole = "developer"; // can write in its own tenant
       const attacker = appRouter.createCaller(otherCtx);
       await expect(attacker.analytics.updateExtractionRule({ id, enabled: false })).rejects.toThrow(/not found/i);
       await expect(attacker.analytics.deleteExtractionRule({ id })).rejects.toThrow(/not found/i);
@@ -253,5 +256,15 @@ describe("metric extraction rules", () => {
     } finally {
       await owner.analytics.deleteExtractionRule({ id });
     }
+  });
+
+  it("SECURITY: view-only members cannot perform write mutations", async () => {
+    const ctx = createAuthContext().ctx;
+    (ctx.user as any).role = "user";
+    (ctx.user as any).tenantRole = null; // view-only member
+    const viewer = appRouter.createCaller(ctx);
+    await expect(
+      viewer.analytics.createExtractionRule({ name: "nope", extractionPath: "$.x" })
+    ).rejects.toThrow(/view-only/i);
   });
 });
