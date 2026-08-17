@@ -8,7 +8,11 @@ All backend APIs are exposed via tRPC over HTTP POST at `/api/trpc`. This docume
 
 All procedures marked as **protected** require a valid session cookie. The cookie is issued by the email/password auth handlers (`/api/auth/login`, `/api/auth/register`, reset, accept-invite) after verifying a bcrypt password hash. Unauthenticated requests to protected procedures return a `401 UNAUTHORIZED` error.
 
-Procedure guards: `protectedProcedure` (authenticated), `tenantProcedure` (scoped to `ctx.tenantId`), `tenantWriteProcedure` (requires platform-admin or tenant role owner/admin/developer), and `adminProcedure`.
+Procedure guards (by action sensitivity): `protectedProcedure` (any authenticated user), `tenantProcedure` (tenant member; reads + member self-service), `tenantWriteProcedure` (platform-admin or tenant owner/admin/developer — resource/config writes, blocks viewers), `tenantAdminProcedure` (platform-admin or tenant owner/admin — governance: billing, RBAC roles, BYOK, DPDP/RoPA), and `adminProcedure` (platform admin only — gateway cluster infra).
+
+**Tenant scope & isolation.** `ctx.tenantId` is the caller's *active* tenant: platform admins may target another tenant via the `x-tenant-id` header (the tenant switcher); non-admins are always pinned to their own tenant. Every by-id read and mutation verifies the target belongs to `ctx.tenantId` — cross-tenant access returns `NOT_FOUND`.
+
+> The per-endpoint `(Mutation, …)` tags below are indicative only. The effective guard is set by the tiers above: resource/config writes are **tenant-write**, governance (billing, RBAC roles, BYOK, DPDP/RoPA) is **tenant-admin**, and gateway cluster management is **platform-admin**.
 
 ---
 

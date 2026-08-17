@@ -170,11 +170,27 @@ Register, reset-password, and accept-invite follow the same bcrypt + JWT pattern
 Request → tRPC Context Builder
          → Extract session cookie → verify JWT signature
          → Load user from database → inject ctx.user
-         → protectedProcedure  : requires ctx.user
-         → tenantProcedure      : scopes to ctx.tenantId
-         → tenantWriteProcedure : requires platform-admin OR tenant role
-                                  owner/admin/developer (null role = view-only)
+         → Read x-tenant-id header → ctx.requestedTenantId
+         → Procedure guard (by action sensitivity):
+             protectedProcedure   : requires ctx.user
+             tenantProcedure      : tenant member; sets ctx.tenantId
+             tenantWriteProcedure : platform-admin OR owner/admin/developer (blocks viewers)
+             tenantAdminProcedure : platform-admin OR owner/admin       (blocks developers)
+             adminProcedure       : platform admin only
 ```
+
+**Active-tenant resolution.** `ctx.tenantId` is not simply `ctx.user.tenantId`.
+The tenant middlewares call `resolveActiveTenant(user, requestedTenantId)`:
+a platform admin may operate inside the tenant selected in the switcher
+(`x-tenant-id` header); everyone else is pinned to their own tenant, so the
+header can never be used to escalate across tenants.
+
+**Ownership enforcement.** Every by-id read and mutation verifies the target row
+belongs to `ctx.tenantId` before acting (fetch-and-compare, or membership in a
+tenant-scoped list). This closes cross-tenant read/write IDOR: a tenant member
+cannot reach another tenant's resource by id; per-user rows (notifications) are
+scoped to `ctx.user.id`. Platform admins are cross-tenant by design but are
+still scoped to their active (switched) tenant on writes.
 
 ### Data Protection
 

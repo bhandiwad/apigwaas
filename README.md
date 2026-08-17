@@ -305,12 +305,30 @@ The platform uses **email/password authentication** with bcrypt-hashed credentia
 
 ### Role-Based Access Control
 
-Two complementary layers:
+Two complementary role dimensions:
 
-- **Platform role** — `admin` (platform-wide) or `user`.
-- **Tenant role** — `owner`, `admin`, `developer`, or `viewer`. Write operations require platform-admin **or** a tenant role of owner/admin/developer (`requireTenantWrite`); a `null` tenant role is view-only.
+- **Platform role** — `admin` (platform-wide superuser) or `user`.
+- **Tenant role** — `owner`, `admin`, `developer`, or `viewer` (a `null` tenant role is view-only).
+
+Authorization is enforced by tRPC procedure guards (`server/_core/trpc.ts`), applied by the action's sensitivity:
+
+| Guard | Requires | Used for |
+|-------|----------|----------|
+| `publicProcedure` | nothing | login, developer-portal listing |
+| `protectedProcedure` | any authenticated user | user-self actions (e.g. `updateMe`, `markRead`) |
+| `tenantProcedure` | tenant membership | reads, and member self-service (raise a support ticket, submit one's own DPDP/consent record) |
+| `tenantWriteProcedure` | platform-admin **or** tenant owner/admin/developer | resource & config writes (APIs, plans, policies, subscriptions, masking, deploy, …) — blocks viewers |
+| `tenantAdminProcedure` | platform-admin **or** tenant owner/admin | governance: billing invoices, RBAC roles, BYOK keys, DPDP/RoPA — blocks developers |
+| `adminProcedure` | platform admin only | platform infrastructure (gateway cluster management) |
 
 Custom RBAC roles add a 4-scope permission matrix (platform, workspace, API, application) for finer-grained delegation.
+
+### Tenant Isolation
+
+The platform is strictly multi-tenant, enforced server-side (not just in the UI):
+
+- **Active-tenant resolution** — platform admins can operate inside any tenant via the tenant switcher, which sends the selected tenant as an `x-tenant-id` header. `resolveActiveTenant()` sets `ctx.tenantId` = admin ? (requested tenant ?? home) : home. **Non-admins are always pinned to their own tenant** — the header can never be used to reach another tenant.
+- **Ownership enforcement** — every by-id read and mutation verifies the target row belongs to `ctx.tenantId` before acting (`api.getById`, and all `update`/`delete`/`revoke`/`approve`/deploy mutations). A tenant member cannot read or mutate another tenant's resources by guessing an id; per-user resources (notifications) are scoped to the user. Platform admins are cross-tenant by design, scoped to their active (switched) tenant on writes.
 
 ---
 
@@ -328,6 +346,7 @@ Custom RBAC roles add a 4-scope permission matrix (platform, workspace, API, app
 
 ### Security Features
 
+- **Server-side tenant isolation** — every cross-tenant read/write is blocked by ownership checks and role tiers (see [Tenant Isolation](#tenant-isolation)); the admin switcher is the only cross-tenant path and is platform-admin-only.
 - **Gateway-enforced PII masking** — Groovy response policy compiled from masking rules.
 - **BYOK** — customer-managed encryption keys with rotation scheduling.
 - **HashiCorp Vault** — KV v2 secrets and dynamic credentials.
